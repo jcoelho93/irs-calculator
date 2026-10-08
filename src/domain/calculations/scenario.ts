@@ -58,7 +58,7 @@ function buildAssumptions(
   a.push({ id: "lawyer", level: "ok", text: `Honorários do advogado: ${s.lawyer.percentage}% do montante, IVA a ${s.lawyer.vatRate}% ${s.lawyer.vatIncluded ? "incluído" : "acrescido"}` });
   a.push({ id: "lawyer-deduct", level: "warning", text: "Os honorários são tratados apenas como custo; não se assume que sejam dedutíveis em IRS" });
   if (hasFiscalDisability(s.tax.disabilityPct, rules))
-    a.push({ id: "disability", level: "warning", text: `Incapacidade de ${s.tax.disabilityPct}% considerada fiscalmente relevante (art. 56.º-A: 85% do rendimento, com exclusão máxima de ${eur(rules.disability.maxExcludedPerCategory)}; art. 87.º: dedução de ${rules.disability.taxpayerCreditIasMultiple} × IAS). Exige atestado médico de incapacidade multiuso válido.` });
+    a.push({ id: "disability", level: "warning", text: `Incapacidade de ${s.tax.disabilityPct}% considerada fiscalmente relevante (art. 56.º-A: 85% do rendimento, com exclusão máxima de ${eur(rules.disability.maxExcludedPerCategory)} por categoria; art. 87.º: uma dedução de ${rules.disability.taxpayerCreditIasMultiple} × IAS). Exige atestado médico de incapacidade multiuso válido.` });
   else if (s.tax.disabilityPct > 0)
     a.push({ id: "disability", level: "ok", text: `Incapacidade de ${s.tax.disabilityPct}% inferior a ${rules.disability.minIncapacityPct}%: sem tratamento especial` });
   if (rules.terminationIndemnity.excessInclusionRate === 1)
@@ -68,11 +68,14 @@ function buildAssumptions(
   a.push({ id: "gestor", level: "ok", text: "O trabalhador não é gestor, administrador ou gerente (art. 2.º, n.º 4, al. a) não modelado)" });
   if (treatments.some((t) => t.classification === "moral_damages" || t.classification === "material_damages" || t.classification === "litigation_settlement"))
     a.push({ id: "damages", level: "warning", text: "O tratamento fiscal de indemnizações por danos exige validação" });
-  a.push({ id: "income", level: "ok", text: `Outros rendimentos de trabalho dependente no ano: ${eur(s.tax.otherAnnualIncome)}` });
+  a.push({ id: "income", level: "ok", text: `Outros rendimentos de trabalho dependente (categoria A) no ano: ${eur(s.tax.otherAnnualIncome)}` });
+  if (s.tax.categoryBGross > 0)
+    a.push({ id: "catb", level: "warning", text: `Rendimentos de categoria B: bruto ${eur(s.tax.categoryBGross)}, tributável após o regime ${eur(Math.min(s.tax.categoryBTaxable, s.tax.categoryBGross))}. Sem dedução específica; a exclusão do art. 56.º-A é calculada sobre o rendimento bruto e depois aplicada proporcionalmente (ordem face ao coeficiente por confirmar).` });
 
   nm.push("Deduções por dependentes, saúde, educação e despesas gerais, e outros créditos de imposto");
   nm.push("Mínimo de existência (art. 70.º do CIRS)");
   nm.push("Contribuições para a Segurança Social sobre salários em atraso, férias e subsídios");
+  if (s.tax.categoryBGross > 0) nm.push("Contribuições de trabalhador independente e pagamentos por conta");
   nm.push("Despesas de acompanhamento e de reabilitação por incapacidade (art. 87.º)");
   if (s.tax.maritalStatus === "married_joint") nm.push("Tributação conjunta (quociente conjugal): estimado como sujeito passivo singular");
   if (s.tax.dependents > 0) nm.push(`${s.tax.dependents} dependente(s): sem deduções por dependentes`);
@@ -102,8 +105,9 @@ function runPass(s: Scenario, rules: TaxYearRules, conservative: boolean, thresh
   const taxable = num(sum(treatments.map((t) => t.taxableAmount)));
   const excluded = num(sum(treatments.map((t) => t.excludedAmount)));
   const common = { disabilityPct: s.tax.disabilityPct, socialSecurityContributions: s.tax.socialSecurityContributions };
-  const irsBase = calculateIrs({ ...common, grossCategoryA: s.tax.otherAnnualIncome }, rules);
-  const irsWith = calculateIrs({ ...common, grossCategoryA: num(D(s.tax.otherAnnualIncome).plus(taxable)) }, rules);
+  const categoryB = { gross: s.tax.categoryBGross, taxable: s.tax.categoryBTaxable };
+  const irsBase = calculateIrs({ ...common, categoryB, grossCategoryA: s.tax.otherAnnualIncome }, rules);
+  const irsWith = calculateIrs({ ...common, categoryB, grossCategoryA: num(D(s.tax.otherAnnualIncome).plus(taxable)) }, rules);
   return { treatments, taxable, excluded, irsWith, irsBase };
 }
 

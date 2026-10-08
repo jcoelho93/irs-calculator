@@ -19,6 +19,7 @@ function load(): SimpleInput {
 
 export default function SimpleCalculator() {
   const [i, setI] = useState<SimpleInput>(load);
+  const [refineOpen] = useState(() => i.disabilityPct > 0 || i.catBGross > 0 || i.accrued > 0 || i.lawyerVatExcluded);
   const set = <K extends keyof SimpleInput>(k: K, v: SimpleInput[K]) => setI((x) => ({ ...x, [k]: v }));
 
   useEffect(() => {
@@ -32,6 +33,7 @@ export default function SimpleCalculator() {
   const r = useMemo(() => calculateSimple(i), [i]);
   const th = r.threshold;
   const ready = i.total > 0;
+  const bInvalid = i.catBTaxable > i.catBGross;
   const datesInverted = !!i.startDate && !!i.endDate && i.endDate < i.startDate;
   const pct = (v: number) => Math.min(100, Math.max(0, v));
 
@@ -56,7 +58,7 @@ export default function SimpleCalculator() {
               <Field label="Fim do contrato">{(id) => <TextInput id={id} type="date" value={i.endDate} onChange={(v) => set("endDate", v)} />}</Field>
             </div>
             {datesInverted && <p role="alert" className="text-xs text-red-700">A data de fim é anterior à data de início.</p>}
-            <Field label="Rendimento tributável previsto este ano (sem a indemnização)" hint="Salário bruto auferido este ano antes e depois da cessação, mais outros rendimentos de trabalho. A indemnização é tributada por cima deste valor, por isso determina os escalões de IRS aplicáveis.">
+            <Field label="Rendimento de trabalho dependente previsto este ano, categoria A (sem a indemnização)" hint="Salário bruto auferido este ano antes e depois da cessação. A indemnização é tributada por cima deste valor, por isso determina os escalões de IRS aplicáveis. Os rendimentos de trabalhador independente indicam-se em «Refinar a estimativa».">
               {(id, d) => <NumberInput id={id} describedBy={d} value={i.otherIncome} suffix="€" onChange={(v) => set("otherIncome", Math.max(0, v))} />}
             </Field>
             <Field label="Honorários do advogado (% da indemnização)">
@@ -64,12 +66,21 @@ export default function SimpleCalculator() {
             </Field>
           </div>
 
-          <details className="mt-4 rounded-md border border-stone-200 bg-stone-50/60 p-3">
+          <details open={refineOpen} className="mt-4 rounded-md border border-stone-200 bg-stone-50/60 p-3">
             <summary className="cursor-pointer text-sm font-medium text-stone-800">Refinar a estimativa (opcional)</summary>
             <div className="mt-3 flex flex-col gap-3">
-              <Field label="Grau de incapacidade" hint="60% ou mais tem tratamento especial em IRS, que reduz o imposto.">
+              <Field label="Grau de incapacidade" hint="60% ou mais tem tratamento especial em IRS, que reduz o imposto. A exclusão aplica-se separadamente às categorias A e B.">
                 {(id, d) => <NumberInput id={id} describedBy={d} value={i.disabilityPct} suffix="%" onChange={(v) => set("disabilityPct", pct(v))} />}
               </Field>
+              <Field label="Rendimento bruto de trabalhador independente este ano (categoria B)" hint="Total faturado no ano. Tem o seu próprio limite de exclusão por incapacidade.">
+                {(id, d) => <NumberInput id={id} describedBy={d} value={i.catBGross} suffix="€" onChange={(v) => set("catBGross", Math.max(0, v))} />}
+              </Field>
+              {i.catBGross > 0 && (
+                <Field label="Desse rendimento, o valor tributável após o regime" hint="Rendimento de categoria B depois do coeficiente do regime simplificado (ou o lucro, em contabilidade organizada), antes da exclusão por incapacidade. Consulte a sua declaração anterior ou o contabilista. A categoria B não tem a dedução específica de 4 587,09 €.">
+                  {(id, d) => <NumberInput id={id} describedBy={d} value={i.catBTaxable} suffix="€" onChange={(v) => set("catBTaxable", Math.max(0, v))} />}
+                </Field>
+              )}
+              {bInvalid && <p role="alert" className="text-xs text-red-700">O valor tributável não pode exceder o rendimento bruto.</p>}
               <Field label="Parte da indemnização que são créditos vencidos" hint="Salários em atraso, férias, subsídios: são sempre tributados como rendimento normal. Deixe a 0 se tudo for indemnização por cessação.">
                 {(id, d) => <NumberInput id={id} describedBy={d} value={i.accrued} suffix="€" onChange={(v) => set("accrued", Math.max(0, Math.min(v, i.total)))} />}
               </Field>

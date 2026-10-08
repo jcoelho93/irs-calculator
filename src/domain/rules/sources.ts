@@ -56,7 +56,7 @@ export const SOURCES: RuleSource[] = [
     title: "Rendimento considerado para sujeitos passivos com deficiência",
     legalReference: "CIRS art. 56.º-A",
     description:
-      "Para sujeitos passivos com incapacidade permanente igual ou superior a 60%, os rendimentos brutos das categorias A e B são considerados apenas por 85% (categoria H por 90%); a parte excluída não pode exceder 2 500 € por categoria.",
+      "Para sujeitos passivos com incapacidade permanente igual ou superior a 60%, os rendimentos brutos das categorias A e B são considerados apenas por 85% (categoria H por 90%); a parte excluída não pode exceder 2 500 € por categoria (o limite aplica-se separadamente a A e a B). Não foi confirmada, em fonte oficial, a ordem do cálculo face ao coeficiente do regime simplificado.",
     url: "https://informador.pt/legislacao/lexit/codigos/direito-fiscal/codigo-do-irs/capitulo-ii-determinacao-do-rendimento-coletavel/seccao-ix-abatimentos/artigo-56-o-a-sujeitos-passivos-com-deficiencia/",
     accessed: "2026-10-07",
     verification: "secondary-source",

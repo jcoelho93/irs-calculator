@@ -48,6 +48,8 @@ export function newScenario(name = "Scenario A"): Scenario {
       dependents: 0,
       disabilityPct: 0,
       otherAnnualIncome: 0,
+      categoryBGross: 0,
+      categoryBTaxable: 0,
       socialSecurityContributions: 0,
       withholdingOnSettlement: 0,
     },

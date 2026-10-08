@@ -17,8 +17,12 @@ export interface SimpleInput {
   /** Average monthly regular pay over the last 12 months (incl. holiday/Christmas allowances / 12). */
   avgMonthlyPay: number;
   disabilityPct: number;
-  /** Other taxable employment income in the payment year. */
+  /** Other taxable employment income (Category A) in the payment year. */
   otherIncome: number;
+  /** Gross Category B (self-employed) income in the payment year. */
+  catBGross: number;
+  /** Category B income taxable after the regime, before art. 56-A. */
+  catBTaxable: number;
   /** Lawyer fee as % of the total. */
   lawyerPct: number;
   /** True if the quoted fee % does not include VAT (23% is added on top). */
@@ -33,6 +37,8 @@ export const EMPTY_INPUT: SimpleInput = {
   avgMonthlyPay: 0,
   disabilityPct: 0,
   otherIncome: 0,
+  catBGross: 0,
+  catBTaxable: 0,
   lawyerPct: 0,
   lawyerVatExcluded: false,
 };
@@ -46,6 +52,8 @@ export function toScenario(i: SimpleInput): Scenario {
   s.employment.avgMonthlyRemuneration = i.avgMonthlyPay;
   s.tax.disabilityPct = i.disabilityPct;
   s.tax.otherAnnualIncome = i.otherIncome;
+  s.tax.categoryBGross = Math.max(0, i.catBGross);
+  s.tax.categoryBTaxable = Math.min(Math.max(0, i.catBTaxable), Math.max(0, i.catBGross));
   s.lawyer = { mode: "percentage", percentage: i.lawyerPct, fixedAmount: 0, vatRate: 23, vatIncluded: !i.lawyerVatExcluded };
   s.settlementTotal = i.total;
   s.parcels = [

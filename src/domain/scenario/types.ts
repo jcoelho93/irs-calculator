@@ -51,6 +51,10 @@ export interface TaxInputs {
   disabilityPct: number;
   /** Other annual gross Category A income in the tax year, excluding this settlement. */
   otherAnnualIncome: number;
+  /** Gross Category B (self-employed) income in the tax year. */
+  categoryBGross: number;
+  /** Category B income taxable after the regime, before the art. 56-A exclusion. */
+  categoryBTaxable: number;
   /** Mandatory social-security contributions on that income (used if higher than the specific deduction). */
   socialSecurityContributions: number;
   /** IRS withheld at source on the settlement (not the same as final liability). */

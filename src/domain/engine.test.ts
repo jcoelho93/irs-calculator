@@ -261,6 +261,60 @@ describe("IRS calculation", () => {
   });
 });
 
+describe("category B and disability (art. 56-A per category)", () => {
+  const A = (g: number, pct: number, b?: { gross: number; taxable: number }) =>
+    calculateIrs({ grossCategoryA: g, categoryB: b, disabilityPct: pct, socialSecurityContributions: 0 }, PT_2026);
+  it("the 2,500 cap applies separately to each category", () => {
+    const r = A(50000, 60, { gross: 50000, taxable: 50000 });
+    expect(r.disabilityExclusionA).toBe(2500);
+    expect(r.disabilityExclusionB).toBe(2500);
+    expect(r.disabilityExclusion).toBe(5000);
+  });
+  it("a category below the cap excludes 15% of its own gross", () => {
+    const r = A(0, 60, { gross: 10000, taxable: 10000 });
+    expect(r.disabilityExclusionB).toBe(1500);
+    expect(r.disabilityExclusionA).toBe(0);
+  });
+  it("category B has no specific deduction", () => {
+    const r = A(0, 0, { gross: 20000, taxable: 20000 });
+    expect(r.specificDeduction).toBe(0);
+    expect(r.taxableIncome).toBe(20000);
+  });
+  it("B taxable is scaled by taxable/gross after the exclusion", () => {
+    const r = A(0, 60, { gross: 40000, taxable: 30000 });
+    expect(r.taxableCategoryB).toBe(28125); // (40000 - 2500) x 0.75
+  });
+  it("taxable B cannot exceed gross B", () => {
+    expect(A(0, 0, { gross: 10000, taxable: 99999 }).taxableIncome).toBe(10000);
+  });
+  it("the art. 87 credit is applied once, not per category", () => {
+    const r = A(50000, 60, { gross: 50000, taxable: 50000 });
+    expect(r.disabilityCredit).toBe(2148.52);
+  });
+  it("without B input results are unchanged", () => {
+    expect(A(30000, 60).taxableIncome).toBe(A(30000, 60, { gross: 0, taxable: 0 }).taxableIncome);
+  });
+  it("settlement gains nothing from the Category A cap when salary already used it", () => {
+    const s = base();
+    s.tax.disabilityPct = 60;
+    s.tax.otherAnnualIncome = 50000;
+    const r = calculateScenario(s);
+    expect(r.irsDetail.withSettlement.disabilityExclusionA).toBe(2500);
+    expect(r.irsDetail.baseline.disabilityExclusionA).toBe(2500);
+  });
+  it("Category B income raises the tax on the settlement (higher brackets)", () => {
+    const s = base();
+    const a = calculateScenario(s).estimatedIRS;
+    s.tax.categoryBGross = 40000;
+    s.tax.categoryBTaxable = 30000;
+    expect(calculateScenario(s).estimatedIRS).toBeGreaterThan(a);
+  });
+  it("simple input maps Category B and clamps taxable to gross", () => {
+    const r = calculateSimple({ ...EMPTY_INPUT, total: 10000, catBGross: 5000, catBTaxable: 9000 });
+    expect(r.irsDetail.baseline.taxableCategoryB).toBe(5000);
+  });
+});
+
 describe("tax years", () => {
   it("loads rules by year and rejects unknown ones", () => {
     expect(getTaxRules(2026).taxYear).toBe(2026);
