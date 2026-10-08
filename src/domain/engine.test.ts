@@ -10,7 +10,7 @@ import { getTaxRules, taxRules, UnsupportedTaxYearError } from "./rules";
 import { PT_2026 } from "./rules/pt2026";
 import type { TaxYearRules } from "./rules/types";
 import { duplicateScenario, newParcel, newScenario } from "./scenario/defaults";
-import { EMPTY_INPUT, calculateSimple, spreadAcrossYears } from "./simple";
+import { EMPTY_INPUT, calculateSimple } from "./simple";
 import type { SimpleInput } from "./simple";
 import type { Scenario } from "./scenario/types";
 
@@ -341,15 +341,13 @@ describe("simple input mapping", () => {
     expect(r.estimatedIRS).toBe(0);
     expect(r.netCash).toBe(0);
   });
-  it("paying nothing next year equals the plain calculation", () => {
-    expect(spreadAcrossYears(input, 0, 0).estimatedIRS).toBe(calculateSimple(input).estimatedIRS);
+  it("net after lawyer = total - IRS - lawyer fee", () => {
+    const r = calculateSimple({ ...input, lawyerPct: 10 });
+    expect(r.lawyerFee).toBe(5000); // 10% of 50,000, VAT included
+    expect(r.netCash).toBeCloseTo(r.grossSettlement - r.estimatedIRS - 5000, 2);
   });
-  it("spreading a large taxable amount over two years does not increase tax", () => {
-    const big = { ...input, total: 120000, accrued: 0, otherIncome: 20000 };
-    const a = spreadAcrossYears(big, 0, 0);
-    const b = spreadAcrossYears(big, 0.5, 0);
-    expect(b.estimatedIRS).toBeLessThan(a.estimatedIRS);
-    expect(b.netCash).toBeGreaterThan(a.netCash);
+  it("VAT is added on top when the quote excludes it", () => {
+    expect(calculateSimple({ ...input, lawyerPct: 10, lawyerVatExcluded: true }).lawyerFee).toBe(6150);
   });
   it("is deterministic and does not mutate input", () => {
     const snap = JSON.stringify(input);

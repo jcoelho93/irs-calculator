@@ -5,7 +5,6 @@ import { newParcel, newScenario } from "./scenario/defaults";
 import type { Scenario } from "./scenario/types";
 import { getTaxRules } from "./rules";
 import type { TaxYearRules } from "./rules/types";
-import { calculateIrs } from "./tax/irs";
 
 /** The handful of inputs the simple UI collects. */
 export interface SimpleInput {
@@ -20,8 +19,10 @@ export interface SimpleInput {
   disabilityPct: number;
   /** Other taxable employment income in the payment year. */
   otherIncome: number;
-  /** Lawyer fee as % of the total, VAT included. */
+  /** Lawyer fee as % of the total. */
   lawyerPct: number;
+  /** True if the quoted fee % does not include VAT (23% is added on top). */
+  lawyerVatExcluded: boolean;
 }
 
 export const EMPTY_INPUT: SimpleInput = {
@@ -33,6 +34,7 @@ export const EMPTY_INPUT: SimpleInput = {
   disabilityPct: 0,
   otherIncome: 0,
   lawyerPct: 0,
+  lawyerVatExcluded: false,
 };
 
 /** Map the simple inputs onto the full scenario model used by the engine. */
@@ -44,7 +46,7 @@ export function toScenario(i: SimpleInput): Scenario {
   s.employment.avgMonthlyRemuneration = i.avgMonthlyPay;
   s.tax.disabilityPct = i.disabilityPct;
   s.tax.otherAnnualIncome = i.otherIncome;
-  s.lawyer = { mode: "percentage", percentage: i.lawyerPct, fixedAmount: 0, vatRate: 23, vatIncluded: true };
+  s.lawyer = { mode: "percentage", percentage: i.lawyerPct, fixedAmount: 0, vatRate: 23, vatIncluded: !i.lawyerVatExcluded };
   s.settlementTotal = i.total;
   s.parcels = [
     newParcel({ name: "Termination compensation", amount: num(D(i.total).minus(accrued)), category: "termination_indemnity" }),
@@ -55,33 +57,4 @@ export function toScenario(i: SimpleInput): Scenario {
 
 export function calculateSimple(i: SimpleInput, rules: TaxYearRules = getTaxRules(2026)): CalculationResult {
   return calculateScenario(toScenario(i), rules);
-}
-
-export interface SpreadResult {
-  shareNextYear: number;
-  estimatedIRS: number;
-  netCash: number;
-}
-
-/**
- * IRS if the taxable part is paid partly in the following year. Only meaningful when the
- * agreement genuinely pays in instalments across years. Assumes the same rules apply next year.
- * Tax is progressive per year, so splitting a large taxable amount can lower the total.
- */
-export function spreadAcrossYears(
-  i: SimpleInput,
-  shareNextYear: number,
-  otherIncomeNextYear: number,
-  rules: TaxYearRules = getTaxRules(2026),
-): SpreadResult {
-  const base = calculateSimple(i, rules);
-  const taxable = D(base.taxableSettlement);
-  const next = taxable.mul(shareNextYear);
-  const common = { disabilityPct: i.disabilityPct, socialSecurityContributions: 0 };
-  const irs = (income: unknown) => calculateIrs({ ...common, grossCategoryA: num(income as number) }, rules).finalIrs;
-  const y1 = D(irs(D(i.otherIncome).plus(taxable.minus(next)))).minus(irs(i.otherIncome));
-  const y2 = D(irs(D(otherIncomeNextYear).plus(next))).minus(irs(otherIncomeNextYear));
-  const tax = num(y1.plus(y2));
-  const net = num(D(base.grossSettlement).minus(tax).minus(base.lawyerFee));
-  return { shareNextYear, estimatedIRS: tax, netCash: net };
 }
