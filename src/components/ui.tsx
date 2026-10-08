@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 export const Disclaimer = () => (
   <p className="text-xs leading-relaxed text-stone-500">
-    This calculator provides estimates for scenario analysis and does not constitute tax, legal, or financial advice. Portuguese tax treatment depends on the facts, legal wording and applicable legislation. Verify material conclusions with a qualified Portuguese tax professional or lawyer.
+    Esta calculadora fornece estimativas para análise de cenários e não constitui aconselhamento fiscal, jurídico ou financeiro. O tratamento fiscal em Portugal depende dos factos, da redação do acordo e da legislação aplicável. Confirme as conclusões relevantes com um profissional de fiscalidade ou um advogado em Portugal.
   </p>
 );
 

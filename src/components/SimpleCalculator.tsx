@@ -38,94 +38,94 @@ export default function SimpleCalculator() {
   return (
     <div className="mx-auto max-w-5xl px-4 pb-16">
       <header className="py-5">
-        <h1 className="text-lg font-semibold tracking-tight">Termination compensation: tax estimate</h1>
-        <p className="text-xs text-stone-500">Portugal, IRS 2026 · estimates only · nothing leaves your browser</p>
+        <h1 className="text-lg font-semibold tracking-tight">Indemnização por cessação do contrato: estimativa de IRS</h1>
+        <p className="text-xs text-stone-500">Portugal, IRS 2026 · apenas estimativas · nenhum dado sai do seu navegador</p>
       </header>
 
       <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-        <Card title="Your numbers">
+        <Card title="Os seus dados">
           <div className="flex flex-col gap-3">
-            <Field label="Settlement amount (gross)">
+            <Field label="Valor da indemnização (bruto)">
               {(id) => <NumberInput id={id} value={i.total} suffix="€" onChange={(v) => set("total", Math.max(0, v))} />}
             </Field>
-            <Field label="Average monthly gross income, last 12 months" hint="Include holiday and Christmas allowances if they are paid separately (total of the last 12 months ÷ 12). Sets the tax-free limit.">
+            <Field label="Rendimento mensal bruto médio, últimos 12 meses" hint="Inclua os subsídios de férias e de Natal se forem pagos à parte (total dos últimos 12 meses ÷ 12). Define o limite isento de imposto.">
               {(id, d) => <NumberInput id={id} describedBy={d} value={i.avgMonthlyPay} suffix="€" onChange={(v) => set("avgMonthlyPay", Math.max(0, v))} />}
             </Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Employment start">{(id) => <TextInput id={id} type="date" value={i.startDate} onChange={(v) => set("startDate", v)} />}</Field>
-              <Field label="Employment end">{(id) => <TextInput id={id} type="date" value={i.endDate} onChange={(v) => set("endDate", v)} />}</Field>
+              <Field label="Início do contrato">{(id) => <TextInput id={id} type="date" value={i.startDate} onChange={(v) => set("startDate", v)} />}</Field>
+              <Field label="Fim do contrato">{(id) => <TextInput id={id} type="date" value={i.endDate} onChange={(v) => set("endDate", v)} />}</Field>
             </div>
-            {datesInverted && <p role="alert" className="text-xs text-red-700">The end date is before the start date.</p>}
-            <Field label="Expected taxable income this year (excl. settlement)" hint="Gross salary earned this year before and after the termination, plus any other employment income. The settlement is taxed on top of it, so this sets the IRS brackets that apply.">
+            {datesInverted && <p role="alert" className="text-xs text-red-700">A data de fim é anterior à data de início.</p>}
+            <Field label="Rendimento tributável previsto este ano (sem a indemnização)" hint="Salário bruto auferido este ano antes e depois da cessação, mais outros rendimentos de trabalho. A indemnização é tributada por cima deste valor, por isso determina os escalões de IRS aplicáveis.">
               {(id, d) => <NumberInput id={id} describedBy={d} value={i.otherIncome} suffix="€" onChange={(v) => set("otherIncome", Math.max(0, v))} />}
             </Field>
-            <Field label="Lawyer fee (% of settlement)">
+            <Field label="Honorários do advogado (% da indemnização)">
               {(id) => <NumberInput id={id} value={i.lawyerPct} suffix="%" step={0.5} onChange={(v) => set("lawyerPct", pct(v))} />}
             </Field>
           </div>
 
           <details className="mt-4 rounded-md border border-stone-200 bg-stone-50/60 p-3">
-            <summary className="cursor-pointer text-sm font-medium text-stone-800">Refine the estimate (optional)</summary>
+            <summary className="cursor-pointer text-sm font-medium text-stone-800">Refinar a estimativa (opcional)</summary>
             <div className="mt-3 flex flex-col gap-3">
-              <Field label="Disability degree" hint="60% or more gets special IRS treatment, which lowers the tax.">
+              <Field label="Grau de incapacidade" hint="60% ou mais tem tratamento especial em IRS, que reduz o imposto.">
                 {(id, d) => <NumberInput id={id} describedBy={d} value={i.disabilityPct} suffix="%" onChange={(v) => set("disabilityPct", pct(v))} />}
               </Field>
-              <Field label="Part of the settlement that is accrued pay" hint="Unpaid salary, holiday pay, allowances: always taxed as normal income. Leave at 0 if all of it is termination compensation.">
+              <Field label="Parte da indemnização que são créditos vencidos" hint="Salários em atraso, férias, subsídios: são sempre tributados como rendimento normal. Deixe a 0 se tudo for indemnização por cessação.">
                 {(id, d) => <NumberInput id={id} describedBy={d} value={i.accrued} suffix="€" onChange={(v) => set("accrued", Math.max(0, Math.min(v, i.total)))} />}
               </Field>
               <label className="flex items-start gap-2 text-xs text-stone-700">
                 <input type="checkbox" className="mt-0.5" checked={i.lawyerVatExcluded} onChange={(e) => set("lawyerVatExcluded", e.target.checked)} />
-                <span>My lawyer’s % does not include VAT (23% is added on top)</span>
+                <span>A percentagem do meu advogado não inclui IVA (acresce 23%)</span>
               </label>
             </div>
           </details>
         </Card>
 
         <div className="flex flex-col gap-4">
-          <Card title="Estimate">
+          <Card title="Estimativa">
             {!ready ? (
-              <p className="text-sm text-stone-500">Enter the settlement amount to see the estimate.</p>
+              <p className="text-sm text-stone-500">Indique o valor da indemnização para ver a estimativa.</p>
             ) : (
               <>
-                <dl aria-label="Settlement estimate" className="num text-sm">
-                  <Line label="Total settlement" value={fmtEur(r.grossSettlement)} strong />
-                  <Line label="Tax-free part" value={fmtEur(r.excludedSettlement)} />
-                  <Line label="Taxable part" value={fmtEur(r.taxableSettlement)} />
+                <dl aria-label="Estimativa da indemnização" className="num text-sm">
+                  <Line label="Indemnização total" value={fmtEur(r.grossSettlement)} strong />
+                  <Line label="Parte isenta de imposto" value={fmtEur(r.excludedSettlement)} />
+                  <Line label="Parte tributável" value={fmtEur(r.taxableSettlement)} />
                   <div className="my-2 border-t border-stone-200" />
-                  <Line label="Estimated IRS on the settlement" value={`− ${fmtEur(r.estimatedIRS)}`} />
-                  <Line label="Estimated net settlement" value={fmtEur(r.grossSettlement - r.estimatedIRS)} strong />
-                  <Line label={`Lawyer fee${i.lawyerVatExcluded ? " (incl. 23% VAT)" : ""}`} value={`− ${fmtEur(r.lawyerFee)}`} />
-                  <Line label="Net settlement after lawyer fee" value={fmtEur(r.netCash)} strong />
+                  <Line label="IRS estimado sobre a indemnização" value={`− ${fmtEur(r.estimatedIRS)}`} />
+                  <Line label="Indemnização líquida estimada" value={fmtEur(r.grossSettlement - r.estimatedIRS)} strong />
+                  <Line label={`Honorários do advogado${i.lawyerVatExcluded ? " (com 23% de IVA)" : ""}`} value={`− ${fmtEur(r.lawyerFee)}`} />
+                  <Line label="Líquido após honorários do advogado" value={fmtEur(r.netCash)} strong />
                 </dl>
                 {!th && (
                   <p role="status" className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                    Enter the dates and average monthly income to compute the tax-free part. Until then nothing is treated as tax-free.
+                    Indique as datas e o rendimento mensal médio para calcular a parte isenta. Até lá, nada é tratado como isento.
                   </p>
                 )}
                 {th && (
                   <p className="mt-3 rounded-md bg-stone-50 px-3 py-2 text-xs text-stone-700">
-                    Tax-free limit: <b className="num">{fmtEur(th.threshold)}</b> = {fmtEur(th.avgMonthlyRemuneration)} × {th.years} year{th.years === 1 ? "" : "s"} (a started year counts as a full year). Compensation above it is taxed as income.
+                    Limite isento: <b className="num">{fmtEur(th.threshold)}</b> = {fmtEur(th.avgMonthlyRemuneration)} × {th.years} {th.years === 1 ? "ano" : "anos"} (um ano iniciado conta como ano completo). A indemnização acima deste limite é tributada como rendimento.
                   </p>
                 )}
                 <p className="mt-2 text-xs text-stone-500">
-                  IRS is the estimated final liability from your annual return. The amount withheld when you are paid can differ. Assumes the whole settlement is termination compensation unless you enter accrued pay.
+                  O IRS é o imposto final estimado na declaração anual. A retenção na fonte feita no pagamento pode ser diferente. Assume que toda a indemnização é por cessação do contrato, a menos que indique créditos vencidos.
                 </p>
               </>
             )}
           </Card>
 
-          <Card title="How to read this">
+          <Card title="Como interpretar">
             <ul className="list-disc pl-4 text-sm text-stone-700">
-              <li>The tax-free limit applies to genuine termination compensation, based on your average pay and years of service.</li>
-              <li>The split must reflect what the agreement and the law actually say. Re-labelling payments is not a way to change the tax.</li>
-              <li>Lawyer fees are treated as a cost only, not as tax deductible.</li>
+              <li>O limite isento aplica-se à indemnização genuína por cessação, com base na sua remuneração média e nos anos de antiguidade.</li>
+              <li>A repartição tem de refletir o que o acordo e a lei realmente dizem. Mudar a designação dos pagamentos não é forma de alterar o imposto.</li>
+              <li>Os honorários do advogado são tratados apenas como custo, não como dedutíveis em IRS.</li>
             </ul>
           </Card>
         </div>
       </div>
 
       <details className="mt-6 rounded-lg border border-stone-200 bg-white p-4 text-sm">
-        <summary className="cursor-pointer font-medium">Assumptions, what is not modelled, and sources</summary>
+        <summary className="cursor-pointer font-medium">Pressupostos, o que não está modelado e fontes</summary>
         <ul className="mt-3 list-disc pl-4 text-stone-700">
           {r.assumptions.map((a) => <li key={a.id}>{a.text}</li>)}
         </ul>

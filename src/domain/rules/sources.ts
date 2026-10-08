@@ -1,20 +1,21 @@
 import type { RuleSource } from "./types";
 
 /**
- * Centralised sources registry. React components reference sources by id only.
- * `accessed` is the date these were consulted in the build session.
- * The official Portal das Financas / DRE pages were NOT reachable from the build
- * sandbox; where a figure was confirmed only via secondary sources it is flagged.
+ * Registo central de fontes. Os componentes React referem as fontes apenas por id.
+ * `accessed` é a data em que foram consultadas durante o desenvolvimento.
+ * As páginas oficiais do Portal das Finanças e do DRE não estavam acessíveis a partir do
+ * ambiente de desenvolvimento; onde um valor foi confirmado apenas por fontes secundárias,
+ * fica assinalado em `verification`.
  */
 export const SOURCES: RuleSource[] = [
   {
     id: "irs-brackets-2026",
     jurisdiction: "PT",
     taxYear: 2026,
-    title: "IRS rate table, mainland Portugal (OE 2026)",
-    legalReference: "CIRS art. 68; Lei n.º 73-A/2025 (OE 2026)",
+    title: "Tabela de taxas de IRS, Continente (OE 2026)",
+    legalReference: "CIRS art. 68.º; Lei n.º 73-A/2025 (OE 2026)",
     description:
-      "Nine progressive brackets, 12.5% to 48%, with bracket limits updated by 3.51%. Applied here by slicing taxable income (equivalent to the official 'parcela a abater' method).",
+      "Nove escalões progressivos, de 12,5% a 48%, com os limites dos escalões atualizados em 3,51%. Aplicada por fatias do rendimento coletável (equivalente ao método oficial da parcela a abater).",
     url: "https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs68.aspx",
     accessed: "2026-10-07",
     verification: "secondary-source",
@@ -25,10 +26,10 @@ export const SOURCES: RuleSource[] = [
     id: "specific-deduction-2026",
     jurisdiction: "PT",
     taxYear: 2026,
-    title: "Category A specific deduction",
-    legalReference: "CIRS art. 25 (8.54 x IAS)",
+    title: "Dedução específica da categoria A",
+    legalReference: "CIRS art. 25.º (8,54 × IAS)",
     description:
-      "€4,587.09 in 2026 (8.54 x IAS of €537.13), or the mandatory social-security contributions if higher.",
+      "4 587,09 € em 2026 (8,54 × IAS de 537,13 €), ou o valor das contribuições obrigatórias para regimes de proteção social, se superior.",
     accessed: "2026-10-07",
     verification: "secondary-source",
     effectiveFrom: "2026-01-01",
@@ -38,10 +39,10 @@ export const SOURCES: RuleSource[] = [
     id: "termination-indemnity-2026",
     jurisdiction: "PT",
     taxYear: 2026,
-    title: "Tax on termination compensation",
-    legalReference: "CIRS art. 2(4)(b)",
+    title: "Tributação das indemnizações por cessação do contrato de trabalho",
+    legalReference: "CIRS art. 2.º, n.º 4, al. b)",
     description:
-      "Amounts paid on termination of an employment contract are taxed only on the part exceeding: average monthly regular remuneration (last 12 months, with retribution character, subject to tax) x years or fraction of seniority with the paying entity. The exclusion is lost if a new link with the same entity is created within 24 months. Accrued rights (arrears, holiday pay, allowances) do not benefit from it. Whether the excess is taxed at 100% (as modelled) must be validated.",
+      "As importâncias pagas pela cessação do contrato de trabalho só são tributadas na parte que exceda o valor médio das remunerações regulares com carácter de retribuição, sujeitas a imposto, auferidas nos últimos 12 meses, multiplicado pelo número de anos ou fração de antiguidade na entidade devedora. A exclusão perde-se se, nos 24 meses seguintes, for criado novo vínculo com a mesma entidade. Os créditos já vencidos (salários em atraso, férias, subsídios) não beneficiam da exclusão. Está por confirmar se o excedente é tributado a 100%, como aqui modelado.",
     url: "https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs2.aspx",
     accessed: "2026-10-07",
     verification: "secondary-source",
@@ -52,10 +53,10 @@ export const SOURCES: RuleSource[] = [
     id: "disability-56a",
     jurisdiction: "PT",
     taxYear: null,
-    title: "Reduced taxable income for taxpayers with disability",
-    legalReference: "CIRS art. 56-A",
+    title: "Rendimento considerado para sujeitos passivos com deficiência",
+    legalReference: "CIRS art. 56.º-A",
     description:
-      "For taxpayers with permanent incapacity >= 60%, gross category A and B income is considered at 85% (H at 90%); the excluded part cannot exceed €2,500 per category.",
+      "Para sujeitos passivos com incapacidade permanente igual ou superior a 60%, os rendimentos brutos das categorias A e B são considerados apenas por 85% (categoria H por 90%); a parte excluída não pode exceder 2 500 € por categoria.",
     url: "https://informador.pt/legislacao/lexit/codigos/direito-fiscal/codigo-do-irs/capitulo-ii-determinacao-do-rendimento-coletavel/seccao-ix-abatimentos/artigo-56-o-a-sujeitos-passivos-com-deficiencia/",
     accessed: "2026-10-07",
     verification: "secondary-source",
@@ -66,10 +67,10 @@ export const SOURCES: RuleSource[] = [
     id: "disability-87",
     jurisdiction: "PT",
     taxYear: null,
-    title: "Tax credit for taxpayers with disability",
-    legalReference: "CIRS art. 87",
+    title: "Dedução à coleta para sujeitos passivos com deficiência",
+    legalReference: "CIRS art. 87.º",
     description:
-      "A deduction from the computed tax of 4 x IAS per taxpayer with incapacity >= 60% (2.5 x IAS per disabled dependent; extra deductions for companionship at >= 90% and for rehabilitation/insurance expenses are not modelled).",
+      "Dedução à coleta de 4 × IAS por sujeito passivo com incapacidade igual ou superior a 60% (2,5 × IAS por dependente com deficiência). As deduções adicionais de despesas de acompanhamento (grau igual ou superior a 90%) e de reabilitação ou seguros não estão modeladas.",
     url: "https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs87.aspx",
     accessed: "2026-10-07",
     verification: "secondary-source",
@@ -80,9 +81,9 @@ export const SOURCES: RuleSource[] = [
     id: "solidarity-68a",
     jurisdiction: "PT",
     taxYear: null,
-    title: "Additional solidarity rate",
-    legalReference: "CIRS art. 68-A",
-    description: "2.5% on taxable income between €80,000 and €250,000, 5% above €250,000.",
+    title: "Taxa adicional de solidariedade",
+    legalReference: "CIRS art. 68.º-A",
+    description: "2,5% sobre o rendimento coletável entre 80 000 € e 250 000 €, e 5% acima de 250 000 €.",
     url: "https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs68a.aspx",
     accessed: "2026-10-07",
     verification: "secondary-source",
@@ -93,10 +94,10 @@ export const SOURCES: RuleSource[] = [
     id: "damages-treatment",
     jurisdiction: "PT",
     taxYear: null,
-    title: "Damages and litigation settlements",
-    legalReference: "CIRS arts. 2, 9, 10, 12 (to be confirmed)",
+    title: "Indemnizações por danos e acordos judiciais",
+    legalReference: "CIRS arts. 2.º, 9.º, 10.º, 12.º (a confirmar)",
     description:
-      "Whether damages are taxable depends on what they repair (loss of income vs. non-patrimonial harm) and on the wording and legal basis of the settlement. No exact article has been verified: the engine models the outcome as an explicit, user-overridable assumption.",
+      "A tributação depende do que a indemnização repara (perda de rendimentos ou dano não patrimonial) e da redação e fundamento legal do acordo. Não foi verificado nenhum artigo concreto: o resultado é tratado como pressuposto explícito.",
     accessed: "2026-10-07",
     verification: "needs-verification",
     effectiveFrom: "1989-01-01",
@@ -106,10 +107,10 @@ export const SOURCES: RuleSource[] = [
     id: "accrued-rights",
     jurisdiction: "PT",
     taxYear: null,
-    title: "Accrued remuneration is ordinary Category A income",
-    legalReference: "CIRS art. 2(1)",
+    title: "Créditos vencidos são rendimento normal da categoria A",
+    legalReference: "CIRS art. 2.º, n.º 1",
     description:
-      "Salary arrears, holiday pay and holiday/Christmas allowances are remuneration, not termination compensation, and are taxed as ordinary employment income. Social-security contributions on these are not modelled.",
+      "Salários em atraso, férias e subsídios de férias e de Natal são remuneração, não indemnização por cessação, e são tributados como rendimentos normais de trabalho dependente. As contribuições para a Segurança Social sobre estes valores não estão modeladas.",
     accessed: "2026-10-07",
     verification: "secondary-source",
     effectiveFrom: "1989-01-01",
@@ -119,10 +120,10 @@ export const SOURCES: RuleSource[] = [
     id: "lawyer-fees",
     jurisdiction: "PT",
     taxYear: null,
-    title: "Lawyer fees",
+    title: "Honorários de advogado",
     legalReference: "n/a",
     description:
-      "Modelled purely as a cash cost. No claim is made that they are deductible for IRS; that is a separate legal question.",
+      "Tratados apenas como custo de caixa. Não se afirma que sejam dedutíveis em IRS; essa é uma questão jurídica distinta.",
     accessed: "2026-10-07",
     verification: "needs-verification",
     effectiveFrom: "1989-01-01",

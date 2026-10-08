@@ -50,32 +50,33 @@ function buildAssumptions(
 ): { assumptions: Assumption[]; notModelled: string[] } {
   const a: Assumption[] = [];
   const nm: string[] = [];
-  a.push({ id: "resident", level: "ok", text: "Portuguese tax resident (mainland rate table)" });
-  a.push({ id: "year", level: "ok", text: `Tax year: ${rules.taxYear}` });
-  a.push({ id: "reason", level: "ok", text: `Termination classified as: ${s.employment.terminationReason}` });
-  a.push({ id: "avg", level: thresholdKnown ? "ok" : "warning", text: thresholdKnown ? `Average monthly remuneration: ${effectiveAvgMonthly(s).toFixed(2)}` : "Average monthly remuneration / dates missing: termination threshold not computed" });
-  a.push({ id: "lawyer", level: "ok", text: `Lawyer fee: ${s.lawyer.mode}${s.lawyer.mode !== "fixed" ? ` ${s.lawyer.percentage}%` : ""}${s.lawyer.mode !== "percentage" ? ` fixed ${s.lawyer.fixedAmount}` : ""}, VAT ${s.lawyer.vatRate}% ${s.lawyer.vatIncluded ? "included" : "added"}` });
-  a.push({ id: "lawyer-deduct", level: "warning", text: "Lawyer fees are modelled as a cash cost; not treated as IRS deductible" });
+  const eur = (n: number) => n.toLocaleString("pt-PT", { style: "currency", currency: "EUR" });
+  a.push({ id: "resident", level: "ok", text: "Residente fiscal em Portugal (tabela de taxas do continente)" });
+  a.push({ id: "year", level: "ok", text: `Ano fiscal: ${rules.taxYear}` });
+  a.push({ id: "termination", level: "ok", text: "Cessação do contrato de trabalho com direito à regra de exclusão do art. 2.º, n.º 4, al. b) do CIRS" });
+  a.push({ id: "avg", level: thresholdKnown ? "ok" : "warning", text: thresholdKnown ? `Remuneração média mensal dos últimos 12 meses: ${eur(effectiveAvgMonthly(s))}` : "Faltam as datas ou a remuneração média mensal: o limite isento não foi calculado" });
+  a.push({ id: "lawyer", level: "ok", text: `Honorários do advogado: ${s.lawyer.percentage}% do montante, IVA a ${s.lawyer.vatRate}% ${s.lawyer.vatIncluded ? "incluído" : "acrescido"}` });
+  a.push({ id: "lawyer-deduct", level: "warning", text: "Os honorários são tratados apenas como custo; não se assume que sejam dedutíveis em IRS" });
   if (hasFiscalDisability(s.tax.disabilityPct, rules))
-    a.push({ id: "disability", level: "warning", text: `Disability ${s.tax.disabilityPct}% treated as fiscally relevant (art. 56-A 85% rule capped at €${rules.disability.maxExcludedPerCategory}, art. 87 credit ${rules.disability.taxpayerCreditIasMultiple} x IAS). Requires a valid multiuse medical certificate.` });
+    a.push({ id: "disability", level: "warning", text: `Incapacidade de ${s.tax.disabilityPct}% considerada fiscalmente relevante (art. 56.º-A: 85% do rendimento, com exclusão máxima de ${eur(rules.disability.maxExcludedPerCategory)}; art. 87.º: dedução de ${rules.disability.taxpayerCreditIasMultiple} × IAS). Exige atestado médico de incapacidade multiuso válido.` });
   else if (s.tax.disabilityPct > 0)
-    a.push({ id: "disability", level: "ok", text: `Disability ${s.tax.disabilityPct}% is below ${rules.disability.minIncapacityPct}%: no disability treatment applied` });
+    a.push({ id: "disability", level: "ok", text: `Incapacidade de ${s.tax.disabilityPct}% inferior a ${rules.disability.minIncapacityPct}%: sem tratamento especial` });
   if (rules.terminationIndemnity.excessInclusionRate === 1)
-    a.push({ id: "excess", level: "warning", text: "Excess of termination compensation over the threshold is taxed at 100% (to be validated)" });
+    a.push({ id: "excess", level: "warning", text: "A parte da indemnização acima do limite isento é tributada a 100% (a confirmar)" });
   if (!s.employment.rehiredWithin24Months)
-    a.push({ id: "rehire", level: "ok", text: "No new link with the same employer within 24 months" });
-  a.push({ id: "gestor", level: "ok", text: "Worker is not a manager/director/administrator (art. 2(4)(a) not modelled)" });
+    a.push({ id: "rehire", level: "ok", text: "Sem novo vínculo com a mesma entidade nos 24 meses seguintes" });
+  a.push({ id: "gestor", level: "ok", text: "O trabalhador não é gestor, administrador ou gerente (art. 2.º, n.º 4, al. a) não modelado)" });
   if (treatments.some((t) => t.classification === "moral_damages" || t.classification === "material_damages" || t.classification === "litigation_settlement"))
-    a.push({ id: "damages", level: "warning", text: "Tax treatment of damages requires validation" });
-  a.push({ id: "income", level: "ok", text: `Other annual Category A income: ${s.tax.otherAnnualIncome.toFixed(2)} (in the same tax year)` });
+    a.push({ id: "damages", level: "warning", text: "O tratamento fiscal de indemnizações por danos exige validação" });
+  a.push({ id: "income", level: "ok", text: `Outros rendimentos de trabalho dependente no ano: ${eur(s.tax.otherAnnualIncome)}` });
 
-  nm.push("Dependent deductions, health/education/general expense deductions and other tax credits");
-  nm.push("Mínimo de existência (art. 70 CIRS)");
-  nm.push("Social-security contributions on arrears, holiday pay and allowances");
-  nm.push("Companion-expense and rehabilitation deductions for disability (art. 87)");
-  if (s.tax.maritalStatus === "married_joint") nm.push("Joint taxation (quociente conjugal): estimated as a single taxpayer");
-  if (s.tax.dependents > 0) nm.push(`${s.tax.dependents} dependent(s): no dependent deductions applied`);
-  for (const n of nm) a.push({ id: `nm-${n.slice(0, 12)}`, level: "not_modelled", text: `Not modelled: ${n}` });
+  nm.push("Deduções por dependentes, saúde, educação e despesas gerais, e outros créditos de imposto");
+  nm.push("Mínimo de existência (art. 70.º do CIRS)");
+  nm.push("Contribuições para a Segurança Social sobre salários em atraso, férias e subsídios");
+  nm.push("Despesas de acompanhamento e de reabilitação por incapacidade (art. 87.º)");
+  if (s.tax.maritalStatus === "married_joint") nm.push("Tributação conjunta (quociente conjugal): estimado como sujeito passivo singular");
+  if (s.tax.dependents > 0) nm.push(`${s.tax.dependents} dependente(s): sem deduções por dependentes`);
+  for (const n of nm) a.push({ id: `nm-${n.slice(0, 12)}`, level: "not_modelled", text: `Não modelado: ${n}` });
   return { assumptions: a, notModelled: nm };
 }
 
