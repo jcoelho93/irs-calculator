@@ -3,7 +3,6 @@ import { calculateScenario } from "./calculations/scenario";
 import { calculateLawyerFee } from "./calculations/lawyerFees";
 import { computeSeniority } from "./calculations/duration";
 import { validateScenario } from "./calculations/validation";
-import { sensitivity, optimize, rankMetric } from "./calculations/analysis";
 import { calculateIrs, progressiveTax } from "./tax/irs";
 import { applyThreshold, terminationThreshold } from "./tax/termination";
 import { D, cents } from "./money";
@@ -11,7 +10,8 @@ import { getTaxRules, taxRules, UnsupportedTaxYearError } from "./rules";
 import { PT_2026 } from "./rules/pt2026";
 import type { TaxYearRules } from "./rules/types";
 import { duplicateScenario, newParcel, newScenario } from "./scenario/defaults";
-import { exportScenarioJson, importScenarioJson } from "./io/exchange";
+import { EMPTY_INPUT, calculateSimple, spreadAcrossYears } from "./simple";
+import type { SimpleInput } from "./simple";
 import type { Scenario } from "./scenario/types";
 
 /** 2015-03-01 -> 2024-06-30: 9 full years + fraction = 10. avg 2,000 -> threshold 20,000. */
@@ -318,38 +318,44 @@ describe("scenarios are independent", () => {
   });
 });
 
-describe("export / import", () => {
-  it("round-trips a scenario", () => {
-    const a = base();
-    expect(importScenarioJson(exportScenarioJson(a))).toEqual(a);
+describe("simple input mapping", () => {
+  const input: SimpleInput = { ...EMPTY_INPUT, total: 50000, accrued: 10000, startDate: "2015-03-01", endDate: "2024-06-30", avgMonthlyPay: 2000 };
+  it("splits total into termination compensation and accrued pay", () => {
+    const r = calculateSimple(input);
+    expect(r.grossSettlement).toBe(50000);
+    expect(r.excludedSettlement).toBe(20000); // threshold 2000 x 10
+    expect(r.taxableSettlement).toBe(30000); // 20000 excess + 10000 accrued
   });
-  it("rejects future schema versions", () => {
-    expect(() => importScenarioJson(JSON.stringify({ version: 99, scenario: base() }))).toThrow();
+  it("while compensation exceeds the threshold, moving money to accrued pay changes nothing", () => {
+    expect(calculateSimple({ ...input, accrued: 20000 }).estimatedIRS).toBe(calculateSimple(input).estimatedIRS);
   });
-});
-
-describe("analysis", () => {
-  it("sensitivity varies one parcel", () => {
-    const s = base();
-    const rows = sensitivity(s, { kind: "parcel", parcelId: s.parcels[0].id }, 30000, 60000, 7);
-    expect(rows).toHaveLength(7);
-    expect(rows[0].value).toBe(30000);
-    expect(rows[6].value).toBe(60000);
-    expect(rows[6].netCash).toBeGreaterThan(rows[0].netCash);
+  it("accrued pay only costs tax once it pushes compensation below the threshold", () => {
+    expect(calculateSimple({ ...input, accrued: 40000 }).estimatedIRS).toBeGreaterThan(calculateSimple(input).estimatedIRS);
   });
-  it("optimize respects totals and bounds", () => {
-    const s = base();
-    s.parcels = [
-      newParcel({ name: "ind", category: "termination_indemnity", amount: 0 }),
-      newParcel({ name: "arr", category: "salary_arrears", amount: 0 }),
-    ];
-    const res = optimize(s, [{ parcelId: s.parcels[0].id, min: 20000, max: 50000 }, { parcelId: s.parcels[1].id, min: 0, max: 30000 }], 50000, 10000);
-    expect(res.evaluated).toBeGreaterThan(0);
-    const a = res.maxNet!.allocation;
-    expect(Object.values(a).reduce((x, y) => x + y, 0)).toBe(50000);
+  it("clamps accrued pay to the total", () => {
+    expect(calculateSimple({ ...input, accrued: 999999 }).grossSettlement).toBe(50000);
   });
-  it("ranks best and worst per metric", () => {
-    expect(rankMetric([3, 1, 2], "min")).toEqual({ best: [1], worst: [0] });
-    expect(rankMetric([5, 5], "max")).toEqual({ best: [], worst: [] });
+  it("blank input yields zeros and no exclusion", () => {
+    const r = calculateSimple(EMPTY_INPUT);
+    expect(r.grossSettlement).toBe(0);
+    expect(r.estimatedIRS).toBe(0);
+    expect(r.netCash).toBe(0);
+  });
+  it("paying nothing next year equals the plain calculation", () => {
+    expect(spreadAcrossYears(input, 0, 0).estimatedIRS).toBe(calculateSimple(input).estimatedIRS);
+  });
+  it("spreading a large taxable amount over two years does not increase tax", () => {
+    const big = { ...input, total: 120000, accrued: 0, otherIncome: 20000 };
+    const a = spreadAcrossYears(big, 0, 0);
+    const b = spreadAcrossYears(big, 0.5, 0);
+    expect(b.estimatedIRS).toBeLessThan(a.estimatedIRS);
+    expect(b.netCash).toBeGreaterThan(a.netCash);
+  });
+  it("is deterministic and does not mutate input", () => {
+    const snap = JSON.stringify(input);
+    const a = calculateSimple(input);
+    const b = calculateSimple(input);
+    expect([a.estimatedIRS, a.netCash, a.taxableSettlement]).toEqual([b.estimatedIRS, b.netCash, b.taxableSettlement]);
+    expect(JSON.stringify(input)).toBe(snap);
   });
 });

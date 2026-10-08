@@ -1,7 +1,8 @@
 # Settlement IRS Workbench
 
-Scenario playground for Portuguese employment-termination settlements: split a settlement into parcels,
-configure lawyer fees, and compare estimated IRS and net cash across scenarios. **Estimates only, not advice.**
+Single-screen estimator for Portuguese employment-termination compensation: enter the total, how much is
+accrued pay, your dates and average pay, and see the tax-free limit, estimated IRS and what you keep, plus the
+effect of paying the taxed part across two tax years. **Estimates only, not advice.**
 
 ```
 npm install
@@ -13,8 +14,8 @@ npm run build
 ## Architecture
 - `src/domain/` is framework-free: `rules/` (per-year data + sources registry), `tax/` (IRS brackets, termination threshold),
   `calculations/` (`calculateScenario(scenario, rules) => CalculationResult`, lawyer fees, validation, sensitivity, optimisation),
-  `scenario/` (types, zod schema, defaults, migration), `io/` (JSON/CSV).
-- `src/components/`, `src/hooks/` are UI only. Persistence is localStorage; exports carry `{ version, scenario }`.
+  `scenario/` (types, defaults), `simple.ts` (maps the simple inputs onto the engine, two-year spread).
+- `src/components/` is UI only. Inputs are kept in localStorage in the browser and never sent anywhere.
 - Money uses `decimal.js`; values are rounded half-up to cents at each reported stage (see `domain/money.ts`).
 
 ## Rules coverage (tax year 2026 only)
