@@ -6,6 +6,7 @@ import { PT_2026 } from "./rules/pt2026";
 import type { TaxYearRules } from "./rules/types";
 import { DEFAULT_INPUT, calculateIncome } from "./income";
 import type { IncomeInput } from "./income";
+import { FILE_KIND, FILE_VERSION, InvalidFileError, parseSavedFile, sanitizeInput, serializeInput } from "./file";
 
 const inc = (p: Partial<IncomeInput>) => calculateIncome({ ...DEFAULT_INPUT, ...p });
 
@@ -171,5 +172,21 @@ describe("tax years", () => {
     const reg = { ...taxRules, "2099": alt };
     const r = calculateIncome({ ...DEFAULT_INPUT, taxYear: 2099, employment: 30000, employmentPeriod: "annual", employeeSsRate: 0 }, getTaxRules(2099, reg));
     expect(r.irs.finalIrs).toBe(15000);
+  });
+});
+
+describe("export / import", () => {
+  const sample: IncomeInput = { ...DEFAULT_INPUT, employment: 2500, selfEmployed: 10000, taxDeductions: 900, brackets: [{ upTo: 10000, rate: 0.1 }, { upTo: null, rate: 0.3 }], solidarity: false };
+  it("round-trips every field", () => {
+    expect(parseSavedFile(serializeInput(sample))).toEqual(sample);
+  });
+  it("rejects invalid JSON and files from other apps", () => {
+    expect(() => parseSavedFile("not json")).toThrow(InvalidFileError);
+    expect(() => parseSavedFile(JSON.stringify({ input: sample }))).toThrow(InvalidFileError);
+    expect(() => parseSavedFile(JSON.stringify({ kind: FILE_KIND, version: FILE_VERSION + 1, input: sample }))).toThrow(InvalidFileError);
+  });
+  it("drops unknown or malformed fields and keeps defaults", () => {
+    const r = sanitizeInput({ employment: "abc", selfEmployed: 5000, employmentPeriod: "weekly", taxYear: 1999, brackets: [{ rate: "x" }], extra: 1 });
+    expect(r).toEqual({ ...DEFAULT_INPUT, selfEmployed: 5000 });
   });
 });

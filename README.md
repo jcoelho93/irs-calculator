@@ -18,6 +18,7 @@ npm run build
   art. 56-A/87 disability, solidarity, deductions from tax), `income.ts` (`calculateIncome(input) => IncomeResult`,
   applies the user's overrides on top of the year's rules).
 - `src/components/` is UI only. Inputs are kept in localStorage in the browser and never sent anywhere.
+  "Exportar" downloads them as a JSON file and "Importar" loads one back (`domain/file.ts` validates it).
 - Money uses `decimal.js`; values are rounded half-up to cents at each reported stage (see `domain/money.ts`).
 
 ## Rules coverage (tax year 2026 only)

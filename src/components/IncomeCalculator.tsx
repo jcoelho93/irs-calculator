@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_INPUT, calculateIncome } from "../domain/income";
 import type { IncomeInput, PayPeriod } from "../domain/income";
 import { getTaxRules, supportedTaxYears } from "../domain/rules";
 import type { Bracket } from "../domain/rules/types";
-import { fmtEur, fmtPct } from "../lib/format";
+import { InvalidFileError, parseSavedFile, sanitizeInput, serializeInput } from "../domain/file";
+import { download, fmtEur, fmtPct } from "../lib/format";
 import { SourcesPanel } from "./SourcesPanel";
 import { Card, Disclaimer, Field, NumberInput, Select } from "./ui";
 
@@ -12,7 +13,7 @@ const KEY = "irs-income-inputs";
 function load(): IncomeInput {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) return { ...DEFAULT_INPUT, ...JSON.parse(raw) };
+    if (raw) return sanitizeInput(JSON.parse(raw));
   } catch {
     /* storage unavailable or corrupt: start blank */
   }
@@ -37,12 +38,16 @@ const ADVANCED_KEYS = [
   "withholding",
 ] as const;
 
+const btnCls = "rounded-md border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-700 shadow-sm hover:bg-stone-50";
+
 /** Percent helpers: the engine works in fractions, the inputs in %. */
 const toPct = (f: number) => Math.round(f * 10000) / 100;
 const fromPct = (p: number) => Math.min(100, Math.max(0, p)) / 100;
 
 export default function IncomeCalculator() {
   const [i, setI] = useState<IncomeInput>(load);
+  const [fileMsg, setFileMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const set = <K extends keyof IncomeInput>(k: K, v: IncomeInput[K]) => setI((x) => ({ ...x, [k]: v }));
 
   useEffect(() => {
@@ -53,6 +58,22 @@ export default function IncomeCalculator() {
     }
   }, [i]);
 
+  const exportFile = () => {
+    download(`irs-calculadora-${new Date().toISOString().slice(0, 10)}.json`, serializeInput(i));
+    setFileMsg(null);
+  };
+  const importFile = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      setI(parseSavedFile(await file.text()));
+      setFileMsg({ ok: true, text: `Dados importados de ${file.name}.` });
+    } catch (e) {
+      setFileMsg({ ok: false, text: e instanceof InvalidFileError ? e.message : "Não foi possível ler o ficheiro." });
+    } finally {
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
   const base = getTaxRules(i.taxYear);
   const r = useMemo(() => calculateIncome(i), [i]);
   const ready = r.grossTotal > 0;
@@ -62,10 +83,22 @@ export default function IncomeCalculator() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 pb-16">
-      <header className="py-5">
-        <h1 className="text-lg font-semibold tracking-tight">Calculadora de rendimento líquido e IRS</h1>
-        <p className="text-xs text-stone-500">Portugal, IRS {i.taxYear} · apenas estimativas · nenhum dado sai do seu navegador</p>
+      <header className="flex flex-wrap items-start justify-between gap-3 py-5">
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight">Calculadora de rendimento líquido e IRS</h1>
+          <p className="text-xs text-stone-500">Portugal, IRS {i.taxYear} · apenas estimativas · nenhum dado sai do seu navegador</p>
+        </div>
+        <div className="flex gap-2">
+          <button type="button" onClick={exportFile} className={btnCls} title="Guardar os dados num ficheiro">Exportar</button>
+          <button type="button" onClick={() => fileRef.current?.click()} className={btnCls} title="Carregar dados de um ficheiro exportado">Importar</button>
+          <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" aria-label="Ficheiro a importar" onChange={(e) => importFile(e.target.files?.[0])} />
+        </div>
       </header>
+      {fileMsg && (
+        <p role={fileMsg.ok ? "status" : "alert"} className={`mb-4 rounded-md px-3 py-2 text-xs ${fileMsg.ok ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-800"}`}>
+          {fileMsg.text}
+        </p>
+      )}
 
       <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <div className="flex flex-col gap-4">
