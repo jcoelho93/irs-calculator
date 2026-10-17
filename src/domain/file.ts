@@ -44,6 +44,7 @@ export function sanitizeInput(raw: unknown): IncomeInput {
     if (v === undefined) continue;
     const ok =
       key === "taxYear" ? supportedTaxYears().includes(v as number)
+      : key === "irsJovemYear" ? Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 10
       : key === "employmentPeriod" ? typeof v === "string" && v in PERIOD_MONTHS
       : key === "brackets" ? v === null || isBrackets(v)
       : key === "solidarity" ? typeof v === "boolean"

@@ -43,6 +43,15 @@ export interface TaxYearRules {
     taxpayerCreditIasMultiple: number;
   };
   solidarity: { from: number; to: number | null; rate: number }[];
+  /** IRS Jovem (art. 12-B CIRS): exempt share of Category A and B gross income by benefit year. */
+  irsJovem: {
+    /** Index 0 = 1st year of income after studies. */
+    exemptShareByYear: number[];
+    /** Yearly cap on the exempt amount, in multiples of IAS. */
+    capIasMultiple: number;
+  };
+  /** Highest share of the tax a municipality may hand back (benefício municipal, Lei 73/2013 art. 26). */
+  maxMunicipalBenefit: number;
   socialSecurity: {
     /** Employee contribution rate on Category A gross pay (0.11 = 11%). */
     employeeRate: number;

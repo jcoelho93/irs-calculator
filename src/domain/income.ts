@@ -24,6 +24,10 @@ export interface IncomeInput {
   taxDeductions: number;
 
   // Advanced
+  /** IRS Jovem benefit year in the tax year (1-10); 0 = not applicable. */
+  irsJovemYear: number;
+  /** Benefício municipal: share of the tax the municipality hands back (0.02 = 2%). */
+  municipalBenefit: number;
   disabilityPct: number;
   /** Simplified-regime coefficient for Category B (0.75 = 75% of gross is taxable). */
   selfEmployedCoefficient: number | null;
@@ -43,6 +47,8 @@ export const DEFAULT_INPUT: IncomeInput = {
   employmentPeriod: "monthly14",
   selfEmployed: 0,
   taxDeductions: 0,
+  irsJovemYear: 0,
+  municipalBenefit: 0,
   disabilityPct: 0,
   selfEmployedCoefficient: null,
   employeeSsRate: null,
@@ -103,6 +109,8 @@ export function calculateIncome(i: IncomeInput, base?: TaxYearRules): IncomeResu
       // Only mandatory Category A contributions count towards the art. 25 deduction.
       socialSecurityContributions: num(ssA),
       otherTaxDeductions: i.taxDeductions,
+      irsJovemYear: i.irsJovemYear,
+      municipalBenefit: i.municipalBenefit,
     },
     rules,
   );

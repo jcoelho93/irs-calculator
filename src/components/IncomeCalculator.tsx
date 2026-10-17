@@ -4,7 +4,9 @@ import type { IncomeInput, PayPeriod } from "../domain/income";
 import { getTaxRules, supportedTaxYears } from "../domain/rules";
 import type { Bracket } from "../domain/rules/types";
 import { InvalidFileError, parseSavedFile, sanitizeInput, serializeInput } from "../domain/file";
+import { NotALiquidacaoError, parseLiquidacao, patchFromLiquidacao } from "../domain/liquidacao";
 import { download, fmtEur, fmtPct } from "../lib/format";
+import { pdfToText } from "../lib/pdfText";
 import { SourcesPanel } from "./SourcesPanel";
 import { Card, Disclaimer, Field, NumberInput, Select } from "./ui";
 
@@ -27,6 +29,8 @@ const PERIODS: { id: PayPeriod; label: string }[] = [
 ];
 
 const ADVANCED_KEYS = [
+  "irsJovemYear",
+  "municipalBenefit",
   "disabilityPct",
   "selfEmployedCoefficient",
   "employeeSsRate",
@@ -65,13 +69,37 @@ export default function IncomeCalculator() {
   const importFile = async (file: File | undefined) => {
     if (!file) return;
     try {
-      setI(parseSavedFile(await file.text()));
-      setFileMsg({ ok: true, text: `Dados importados de ${file.name}.` });
+      if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+        await importLiquidacao(file);
+      } else {
+        setI(parseSavedFile(await file.text()));
+        setFileMsg({ ok: true, text: `Dados importados de ${file.name}.` });
+      }
     } catch (e) {
-      setFileMsg({ ok: false, text: e instanceof InvalidFileError ? e.message : "Não foi possível ler o ficheiro." });
+      const known = e instanceof InvalidFileError || e instanceof NotALiquidacaoError;
+      setFileMsg({ ok: false, text: known ? e.message : "Não foi possível ler o ficheiro." });
     } finally {
       if (fileRef.current) fileRef.current.value = "";
     }
+  };
+  /** Fills deductions, disability, benefício municipal and IRS Jovem from last year's assessment. */
+  const importLiquidacao = async (file: File) => {
+    const liq = parseLiquidacao(await pdfToText(await file.arrayBuffer()));
+    const p = patchFromLiquidacao(liq, i.taxYear);
+    setI((x) => ({
+      ...x,
+      taxDeductions: p.taxDeductions,
+      municipalBenefit: p.municipalBenefit,
+      irsJovemYear: p.irsJovemYear,
+      disabilityPct: p.hasDisability ? Math.max(x.disabilityPct, 60) : x.disabilityPct,
+    }));
+    const parts = [
+      `deduções à coleta ${fmtEur(p.taxDeductions, true)}${p.hasDisability ? " (sem a dedução por deficiência, que a calculadora aplica)" : ""}`,
+      `benefício municipal ${toPct(p.municipalBenefit)}%`,
+      p.irsJovemYear ? `IRS Jovem ${p.irsJovemYear}.º ano em ${i.taxYear}` : "sem IRS Jovem",
+      ...(p.hasDisability ? ["incapacidade de 60% ou mais"] : []),
+    ];
+    setFileMsg({ ok: true, text: `Da nota de liquidação${liq.year ? ` de ${liq.year}` : ""}: ${parts.join(", ")}. Os rendimentos não são importados.` });
   };
 
   const base = getTaxRules(i.taxYear);
@@ -90,8 +118,8 @@ export default function IncomeCalculator() {
         </div>
         <div className="flex gap-2">
           <button type="button" onClick={exportFile} className={btnCls} title="Guardar os dados num ficheiro">Exportar</button>
-          <button type="button" onClick={() => fileRef.current?.click()} className={btnCls} title="Carregar dados de um ficheiro exportado">Importar</button>
-          <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" aria-label="Ficheiro a importar" onChange={(e) => importFile(e.target.files?.[0])} />
+          <button type="button" onClick={() => fileRef.current?.click()} className={btnCls} title="Carregar um ficheiro exportado ou a nota de liquidação do ano passado (PDF)">Importar</button>
+          <input ref={fileRef} type="file" accept="application/json,.json,application/pdf,.pdf" className="hidden" aria-label="Ficheiro a importar" onChange={(e) => importFile(e.target.files?.[0])} />
         </div>
       </header>
       {fileMsg && (
@@ -115,7 +143,7 @@ export default function IncomeCalculator() {
               <Field label="Trabalho independente (categoria B), bruto anual" hint="Total faturado no ano em recibos verdes, regime simplificado.">
                 {(id, d) => <NumberInput id={id} describedBy={d} value={i.selfEmployed} suffix="€" onChange={(v) => set("selfEmployed", Math.max(0, v))} />}
               </Field>
-              <Field label="Deduções à coleta" hint="Despesas gerais, saúde, educação, habitação, dependentes, IVA de faturas. Se ainda não sabe, use o total da sua última nota de liquidação.">
+              <Field label="Deduções à coleta" hint="Despesas gerais, saúde, educação, habitação, dependentes, IVA de faturas. Se ainda não sabe, importe a nota de liquidação do ano passado (botão Importar).">
                 {(id, d) => <NumberInput id={id} describedBy={d} value={i.taxDeductions} suffix="€" onChange={(v) => set("taxDeductions", Math.max(0, v))} />}
               </Field>
             </div>
@@ -134,6 +162,20 @@ export default function IncomeCalculator() {
                   {(id) => <Select id={id} value={String(i.taxYear)} onChange={(v) => set("taxYear", Number(v))} options={supportedTaxYears().map((y) => ({ value: String(y), label: String(y) }))} />}
                 </Field>
               )}
+              <Field label="IRS Jovem: ano do benefício" hint="Conte desde o primeiro ano com rendimentos após os estudos (até aos 35 anos). Isenta 100% no 1.º ano, 75% do 2.º ao 4.º, 50% do 5.º ao 7.º e 25% do 8.º ao 10.º.">
+                {(id, d) => (
+                  <Select
+                    id={id}
+                    describedBy={d}
+                    value={String(i.irsJovemYear)}
+                    onChange={(v) => set("irsJovemYear", Number(v))}
+                    options={[{ value: "0", label: "Não se aplica" }, ...base.irsJovem.exemptShareByYear.map((sh, k) => ({ value: String(k + 1), label: `${k + 1}.º ano (${toPct(sh)}% isento)` }))]}
+                  />
+                )}
+              </Field>
+              <Field label="Benefício municipal" hint={`Parte do IRS que o seu município devolve, de 0% a ${toPct(base.maxMunicipalBenefit)}%. Está na linha 20 da nota de liquidação.`}>
+                {(id, d) => <NumberInput id={id} describedBy={d} step={0.5} value={toPct(i.municipalBenefit)} suffix="%" onChange={(v) => set("municipalBenefit", Math.min(fromPct(v), base.maxMunicipalBenefit))} />}
+              </Field>
               <Field label="IRS retido na fonte durante o ano" hint="Para ver se recebe reembolso ou tem de pagar na declaração.">
                 {(id, d) => <NumberInput id={id} describedBy={d} value={i.withholding} suffix="€" onChange={(v) => set("withholding", Math.max(0, v))} />}
               </Field>
@@ -226,14 +268,18 @@ export default function IncomeCalculator() {
               <summary className="cursor-pointer px-4 py-2.5 font-semibold tracking-tight text-stone-800">Como foi calculado o IRS</summary>
               <dl className="num border-t border-stone-100 p-4">
                 {r.grossEmployment > 0 && <Line label="Categoria A" value={fmtEur(r.grossEmployment, true)} />}
+                {r.irs.irsJovemExemptA > 0 && <Line label="Isento por IRS Jovem (A)" value={`− ${fmtEur(r.irs.irsJovemExemptA, true)}`} />}
                 {r.irs.disabilityExclusionA > 0 && <Line label="Exclusão por incapacidade (A)" value={`− ${fmtEur(r.irs.disabilityExclusionA, true)}`} />}
                 {r.grossEmployment > 0 && <Line label="Dedução específica" value={`− ${fmtEur(r.irs.specificDeduction, true)}`} />}
+                {r.irs.irsJovemExemptB > 0 && <Line label="Isento por IRS Jovem (B, bruto)" value={`− ${fmtEur(r.irs.irsJovemExemptB, true)}`} />}
                 {r.grossSelfEmployed > 0 && <Line label={`Categoria B tributável (${toPct(r.selfEmployedCoefficient)}%)`} value={fmtEur(r.irs.taxableCategoryB, true)} />}
                 <Line label="Rendimento coletável" value={fmtEur(r.irs.taxableIncome, true)} strong />
+                {r.irs.irsJovemExempt > 0 && <Line label="Taxa determinada sobre coletável + isento" value={fmtEur(r.irs.taxableIncome + r.irs.irsJovemExempt, true)} />}
                 <Line label="Coleta (aplicação da tabela)" value={fmtEur(r.irs.bracketTax, true)} />
+                {r.irs.solidaritySurcharge > 0 && <Line label="Taxa adicional de solidariedade" value={`+ ${fmtEur(r.irs.solidaritySurcharge, true)}`} />}
                 {r.irs.disabilityCredit > 0 && <Line label="Dedução por incapacidade" value={`− ${fmtEur(r.irs.disabilityCredit, true)}`} />}
                 {r.irs.otherDeductions > 0 && <Line label="Deduções à coleta" value={`− ${fmtEur(r.irs.otherDeductions, true)}`} />}
-                {r.irs.solidaritySurcharge > 0 && <Line label="Taxa adicional de solidariedade" value={`+ ${fmtEur(r.irs.solidaritySurcharge, true)}`} />}
+                {r.irs.municipalBenefit > 0 && <Line label="Benefício municipal" value={`− ${fmtEur(r.irs.municipalBenefit, true)}`} />}
                 <Line label="IRS final" value={fmtEur(r.irs.finalIrs, true)} strong />
               </dl>
               {i.taxDeductions > r.irs.otherDeductions && (
@@ -251,7 +297,8 @@ export default function IncomeCalculator() {
           <li>O IRS é o imposto final estimado na declaração anual. A retenção na fonte mensal pode ser diferente.</li>
           <li>As deduções à coleta são aplicadas como um total, sem os limites globais do art. 78.º para rendimentos mais altos.</li>
           <li>A Segurança Social do trabalhador independente é calculada sobre o ano, sem base mínima nem limite máximo.</li>
-          <li>Não modelado: IRS Jovem, mínimo de existência, tributação conjunta, contabilidade organizada, outras categorias de rendimento, regiões autónomas.</li>
+          <li>IRS Jovem: as condições de elegibilidade (idade, estudos concluídos) não são verificadas.</li>
+          <li>Não modelado: mínimo de existência, tributação conjunta, contabilidade organizada, outras categorias de rendimento, regiões autónomas.</li>
         </ul>
         <div className="mt-4"><SourcesPanel /></div>
       </details>

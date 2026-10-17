@@ -103,6 +103,33 @@ export const SOURCES: RuleSource[] = [
     effectiveFrom: "2019-01-01",
     effectiveTo: null,
   },
+  {
+    id: "irs-jovem",
+    jurisdiction: "PT",
+    taxYear: null,
+    title: "IRS Jovem",
+    legalReference: "CIRS art. 12.º-B",
+    description:
+      "Durante 10 anos a partir do primeiro ano de rendimentos após os estudos (até aos 35 anos), fica isenta uma parte dos rendimentos brutos das categorias A e B: 100% no 1.º ano, 75% do 2.º ao 4.º, 50% do 5.º ao 7.º e 25% do 8.º ao 10.º, com o limite anual de 55 × IAS. O rendimento isento é englobado para determinar a taxa. A aplicação ao rendimento bruto da categoria B antes do coeficiente foi deduzida de uma nota de liquidação real, não de texto oficial; as condições de elegibilidade não são verificadas.",
+    url: "https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs12b.aspx",
+    accessed: "2026-10-17",
+    verification: "secondary-source",
+    effectiveFrom: "2025-01-01",
+    effectiveTo: null,
+  },
+  {
+    id: "municipal-benefit",
+    jurisdiction: "PT",
+    taxYear: null,
+    title: "Benefício municipal (participação variável no IRS)",
+    legalReference: "Lei n.º 73/2013, art. 26.º",
+    description:
+      "Cada município pode devolver aos residentes até 5% do IRS. Na nota de liquidação, é calculado sobre a coleta depois das deduções à coleta. A percentagem depende do município de residência em 31 de dezembro.",
+    accessed: "2026-10-17",
+    verification: "secondary-source",
+    effectiveFrom: "2014-01-01",
+    effectiveTo: null,
+  },
 ];
 
 export const getSource = (id: string): RuleSource | undefined => SOURCES.find((s) => s.id === id);
