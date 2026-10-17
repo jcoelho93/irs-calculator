@@ -1,10 +1,12 @@
 /**
- * Extracts the text of a PDF in the browser, one line per row of text. pdf.js is loaded on demand
- * so it only costs anything when someone imports a PDF.
+ * Extracts the text of each page of a PDF in the browser, one line per row of text. pdf.js is
+ * loaded on demand so it only costs anything when someone imports a PDF.
  */
-export async function pdfToText(data: ArrayBuffer): Promise<string> {
-  const pdfjs = await import("pdfjs-dist");
-  const worker = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
+export async function pdfToPages(data: ArrayBuffer): Promise<string[]> {
+  // The legacy build: the modern one relies on very recent JS (e.g. Map#getOrInsertComputed) that
+  // many browsers still lack.
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const worker = await import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url");
   pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
 
   const task = pdfjs.getDocument({ data });
@@ -26,5 +28,5 @@ export async function pdfToText(data: ArrayBuffer): Promise<string> {
     pages.push(lines.join("\n"));
   }
   await task.destroy();
-  return pages.join("\n");
+  return pages;
 }

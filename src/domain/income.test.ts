@@ -6,6 +6,7 @@ import { PT_2026 } from "./rules/pt2026";
 import type { TaxYearRules } from "./rules/types";
 import { DEFAULT_INPUT, calculateIncome } from "./income";
 import type { IncomeInput } from "./income";
+import { NotAModelo3Error, parseModelo3, patchFromModelo3 } from "./modelo3";
 import { NotALiquidacaoError, parseLiquidacao, patchFromLiquidacao } from "./liquidacao";
 import { FILE_KIND, FILE_VERSION, InvalidFileError, parseSavedFile, sanitizeInput, serializeInput } from "./file";
 
@@ -210,6 +211,14 @@ describe("IRS Jovem (art. 12-B)", () => {
   it("applies the B coefficient to what is left after the exemption", () => {
     expect(irs(0, 8, 10000).taxableCategoryB).toBe(5625); // (10,000 - 2,500) x 0.75
   });
+  it("applies after the art. 56-A disability exclusion and before the B coefficient", () => {
+    const r = calculateIrs({ grossCategoryA: 40000, categoryB: { gross: 10000, taxable: 7500 }, disabilityPct: 60, socialSecurityContributions: 0, irsJovemYear: 8 }, PT_2026);
+    expect(r.disabilityExclusionA).toBe(2500);
+    expect(r.disabilityExclusionB).toBe(1500);
+    expect(r.irsJovemExemptA).toBe(9375); // (40,000 - 2,500) x 25%
+    expect(r.irsJovemExemptB).toBe(2125); // (10,000 - 1,500) x 25%
+    expect(r.taxableCategoryB).toBe(4781.25); // (10,000 - 1,500 - 2,125) x 0.75
+  });
   it("exempt income sets the rate but is not taxed", () => {
     const r = irs(40000, 8);
     const base = r.taxableIncome + r.irsJovemExempt;
@@ -269,5 +278,58 @@ describe("nota de liquidação import", () => {
   it("rejects other documents", () => {
     expect(() => parseLiquidacao("Fatura n.º 1")).toThrow(NotALiquidacaoError);
     expect(() => parseLiquidacao("Demonstração de Liquidação de IRS\nnada")).toThrow(NotALiquidacaoError);
+  });
+});
+
+/** Pages as pdf.js extracts them from a Modelo 3 comprovativo. All figures and ids are made up. */
+const M3 = [
+  `Comprovativo Mod.3 IRS: 100000002 / 2025 / 0000-X0000-00 Página 1 de 3
+DECLARAÇÃO DE RENDIMENTOS - IRS
+MODELO 3
+1 Anexo A 1 8 Anexo G1`,
+  `1 CATEGORIAS A / H 2 ANO DOS RENDIMENTOS
+01 2025
+MODELO 3 PENSÕES
+Anexo A
+500000000 401 A 30.000,00 4.000,00 3.300,00 0,00
+500000000 414 A 2.000,00 0,00
+SOMA DE CONTROLO 32.000,00 4.000,00 3.300,00 0,00 0,00`,
+  `DECLARAÇÃO DE RENDIMENTOS - IRS 01 2025
+MODELO 3
+Anexo B
+A RENDIMENTOS PROFISSIONAIS, COMERCIAIS E INDUSTRIAIS VALOR
+Vendas de mercadorias e produtos 401 1.000,00
+Rendimento das atividades profissionais especificamente previstas na Tabela do art.º 151.º do CIRS 403 3.000,00
+Rendimentos de prestações de serviços não previstos nos campos anteriores 404
+Propriedade intelectual (não abrangida pelo art.º 58.º do EBF), industrial ou de prestação de informações 405 500,00
+SOMA 4.500,00
+B RENDIMENTOS AGRÍCOLAS, SILVÍCOLAS E PECUÁRIOS VALOR
+Prestações de serviços 452 9.999,00`,
+];
+
+describe("Modelo 3 import", () => {
+  it("reads Anexo A totals and Anexo B amounts by code", () => {
+    expect(parseModelo3(M3)).toEqual({
+      year: 2025,
+      employment: { income: 32000, withholding: 4000, contributions: 3300 },
+      selfEmployed: [{ code: "401", amount: 1000 }, { code: "403", amount: 3000 }, { code: "405", amount: 500 }],
+    });
+  });
+  it("derives the SS rate and a weighted coefficient, skipping unknown codes", () => {
+    expect(patchFromModelo3(parseModelo3(M3))).toEqual({
+      employment: 32000,
+      employeeSsRate: 0.103125,
+      selfEmployed: 4000,
+      selfEmployedCoefficient: 0.6, // (1,000 x 0.15 + 3,000 x 0.75) / 4,000
+      skippedCodes: ["405"],
+    });
+  });
+  it("works with only one of the annexes", () => {
+    expect(parseModelo3([M3[0], M3[2]]).employment).toBeNull();
+    expect(parseModelo3([M3[0], M3[1]]).selfEmployed).toEqual([]);
+  });
+  it("rejects other documents", () => {
+    expect(() => parseModelo3(["Fatura"])).toThrow(NotAModelo3Error);
+    expect(() => parseModelo3([M3[0]])).toThrow(NotAModelo3Error);
   });
 });

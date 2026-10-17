@@ -94,28 +94,27 @@ export function calculateIrs(input: IrsInput, rules: TaxYearRules): IrsBreakdown
   const disabled = hasFiscalDisability(input.disabilityPct, rules);
   const d = rules.disability;
 
-  // art. 12-B (IRS Jovem): a share of gross A and B income is exempt, with one cap for both.
-  // The exemption is taken first from Category A, then from B (order not confirmed officially).
+  // art. 56-A: only 85% considered; the excluded part is capped PER CATEGORY.
+  const exclude = (g: Decimal) => (disabled ? min(g.mul(1 - d.categoryAConsideredShare), d.maxExcludedPerCategory) : ZERO);
+  const exclA = exclude(grossAIn);
+  const exclB = exclude(bGrossIn);
+
+  // art. 12-B (IRS Jovem): a share of what remains is exempt, with one cap for A and B together.
+  // Order (art. 56-A first, then IRS Jovem, then the B coefficient) reconciles exactly with a real
+  // assessment; the A-before-B order for the cap is not confirmed.
   const jy = Math.floor(input.irsJovemYear ?? 0);
   const share = jy >= 1 ? (rules.irsJovem.exemptShareByYear[jy - 1] ?? 0) : 0;
   const cap = D(rules.ias).mul(rules.irsJovem.capIasMultiple);
-  const jovemA = min(grossAIn.mul(share), cap);
-  const jovemB = min(bGrossIn.mul(share), cap.minus(jovemA));
-  const gross = grossAIn.minus(jovemA);
-  const bGross = bGrossIn.minus(jovemB);
+  const jovemA = min(grossAIn.minus(exclA).mul(share), cap);
+  const jovemB = min(bGrossIn.minus(exclB).mul(share), cap.minus(jovemA));
   const exempt = jovemA.plus(jovemB);
 
-  // art. 56-A: only 85% considered; the excluded part is capped PER CATEGORY.
-  const exclude = (g: Decimal) => (disabled ? min(g.mul(1 - d.categoryAConsideredShare), d.maxExcludedPerCategory) : ZERO);
-
-  const exclA = exclude(gross);
-  const consideredA = gross.minus(exclA);
+  const consideredA = grossAIn.minus(exclA).minus(jovemA);
 
   // Category B: no art. 25 specific deduction. The regime coefficient (taxable/gross) is applied
-  // to what remains after the IRS Jovem exemption and art. 56-A.
+  // to what is left after art. 56-A and IRS Jovem.
   const bTaxableRaw = min(D(Math.max(0, input.categoryB?.taxable ?? 0)), bGrossIn);
-  const exclB = exclude(bGross);
-  const consideredB = bGross.minus(exclB);
+  const consideredB = bGrossIn.minus(exclB).minus(jovemB);
   const taxableB = bGrossIn.isZero() ? ZERO : consideredB.mul(bTaxableRaw).div(bGrossIn);
 
   // art. 25: greater of the fixed deduction and mandatory contributions; can't exceed Cat A income.

@@ -19,9 +19,10 @@ npm run build
   applies the user's overrides on top of the year's rules).
 - `src/components/` is UI only. Inputs are kept in localStorage in the browser and never sent anywhere.
   "Exportar" downloads them as a JSON file and "Importar" loads one back (`domain/file.ts` validates it).
-  "Importar" also accepts last year's "Demonstração de Liquidação de IRS" PDF: `lib/pdfText.ts` extracts its
-  text with pdf.js (loaded on demand) and `domain/liquidacao.ts` reads deductions from tax, disability,
-  benefício municipal and the IRS Jovem year from it. Income is not imported.
+  "Importar" also accepts last year's PDFs from Portal das Finanças: `lib/pdfText.ts` extracts their text
+  with pdf.js (legacy build, loaded on demand). `domain/modelo3.ts` reads Category A and B income from the
+  Modelo 3 comprovativo; `domain/liquidacao.ts` reads deductions from tax, disability, benefício municipal
+  and the IRS Jovem year from the "Demonstração de Liquidação de IRS".
 - Money uses `decimal.js`; values are rounded half-up to cents at each reported stage (see `domain/money.ts`).
 
 ## Rules coverage (tax year 2026 only)

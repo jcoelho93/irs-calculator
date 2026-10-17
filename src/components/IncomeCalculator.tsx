@@ -6,7 +6,8 @@ import type { Bracket } from "../domain/rules/types";
 import { InvalidFileError, parseSavedFile, sanitizeInput, serializeInput } from "../domain/file";
 import { NotALiquidacaoError, parseLiquidacao, patchFromLiquidacao } from "../domain/liquidacao";
 import { download, fmtEur, fmtPct } from "../lib/format";
-import { pdfToText } from "../lib/pdfText";
+import { NotAModelo3Error, parseModelo3, patchFromModelo3 } from "../domain/modelo3";
+import { pdfToPages } from "../lib/pdfText";
 import { SourcesPanel } from "./SourcesPanel";
 import { Card, Disclaimer, Field, NumberInput, Select } from "./ui";
 
@@ -62,6 +63,7 @@ export default function IncomeCalculator() {
     }
   }, [i]);
 
+  const base = getTaxRules(i.taxYear);
   const exportFile = () => {
     download(`irs-calculadora-${new Date().toISOString().slice(0, 10)}.json`, serializeInput(i));
     setFileMsg(null);
@@ -70,21 +72,24 @@ export default function IncomeCalculator() {
     if (!file) return;
     try {
       if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
-        await importLiquidacao(file);
+        const pages = await pdfToPages(await file.arrayBuffer());
+        if (/Demonstra[çc][ãa]o de Liquida[çc][ãa]o de IRS/i.test(pages.join("\n"))) importLiquidacao(pages);
+        else importModelo3(pages);
       } else {
         setI(parseSavedFile(await file.text()));
         setFileMsg({ ok: true, text: `Dados importados de ${file.name}.` });
       }
     } catch (e) {
-      const known = e instanceof InvalidFileError || e instanceof NotALiquidacaoError;
+      if (!(e instanceof Error) || e.constructor === Error) console.error(e);
+      const known = e instanceof InvalidFileError || e instanceof NotALiquidacaoError || e instanceof NotAModelo3Error;
       setFileMsg({ ok: false, text: known ? e.message : "Não foi possível ler o ficheiro." });
     } finally {
       if (fileRef.current) fileRef.current.value = "";
     }
   };
   /** Fills deductions, disability, benefício municipal and IRS Jovem from last year's assessment. */
-  const importLiquidacao = async (file: File) => {
-    const liq = parseLiquidacao(await pdfToText(await file.arrayBuffer()));
+  const importLiquidacao = (pages: string[]) => {
+    const liq = parseLiquidacao(pages.join("\n"));
     const p = patchFromLiquidacao(liq, i.taxYear);
     setI((x) => ({
       ...x,
@@ -99,10 +104,30 @@ export default function IncomeCalculator() {
       p.irsJovemYear ? `IRS Jovem ${p.irsJovemYear}.º ano em ${i.taxYear}` : "sem IRS Jovem",
       ...(p.hasDisability ? ["incapacidade de 60% ou mais"] : []),
     ];
-    setFileMsg({ ok: true, text: `Da nota de liquidação${liq.year ? ` de ${liq.year}` : ""}: ${parts.join(", ")}. Os rendimentos não são importados.` });
+    setFileMsg({ ok: true, text: `Da nota de liquidação${liq.year ? ` de ${liq.year}` : ""}: ${parts.join(", ")}. Para os rendimentos, importe a declaração Modelo 3.` });
+  };
+  /** Fills last year's Category A and B income from the Modelo 3 declaration. */
+  const importModelo3 = (pages: string[]) => {
+    const m = parseModelo3(pages);
+    const p = patchFromModelo3(m);
+    setI((x) => ({
+      ...x,
+      employment: p.employment,
+      employmentPeriod: "annual",
+      employeeSsRate: p.employeeSsRate,
+      selfEmployed: p.selfEmployed,
+      selfEmployedCoefficient: p.selfEmployedCoefficient === base.categoryBCoefficients[0].coefficient ? null : p.selfEmployedCoefficient,
+    }));
+    const parts = [
+      `categoria A ${fmtEur(p.employment, true)} por ano`,
+      ...(p.employeeSsRate !== null ? [`Segurança Social de ${toPct(p.employeeSsRate)}% (contribuições declaradas)`] : []),
+      `categoria B ${fmtEur(p.selfEmployed, true)}`,
+      ...(p.selfEmployedCoefficient !== null ? [`coeficiente ${toPct(p.selfEmployedCoefficient)}%`] : []),
+    ];
+    const skipped = p.skippedCodes.length ? ` Códigos do anexo B não importados: ${p.skippedCodes.join(", ")}.` : "";
+    setFileMsg({ ok: true, text: `Da declaração Modelo 3${m.year ? ` de ${m.year}` : ""}: ${parts.join(", ")}. Ajuste se este ano for diferente.${skipped}` });
   };
 
-  const base = getTaxRules(i.taxYear);
   const r = useMemo(() => calculateIncome(i), [i]);
   const ready = r.grossTotal > 0;
   const changed = ADVANCED_KEYS.filter((k) => JSON.stringify(i[k]) !== JSON.stringify(DEFAULT_INPUT[k])).length;
@@ -118,7 +143,7 @@ export default function IncomeCalculator() {
         </div>
         <div className="flex gap-2">
           <button type="button" onClick={exportFile} className={btnCls} title="Guardar os dados num ficheiro">Exportar</button>
-          <button type="button" onClick={() => fileRef.current?.click()} className={btnCls} title="Carregar um ficheiro exportado ou a nota de liquidação do ano passado (PDF)">Importar</button>
+          <button type="button" onClick={() => fileRef.current?.click()} className={btnCls} title="Carregar um ficheiro exportado, a declaração Modelo 3 ou a nota de liquidação do ano passado (PDF)">Importar</button>
           <input ref={fileRef} type="file" accept="application/json,.json,application/pdf,.pdf" className="hidden" aria-label="Ficheiro a importar" onChange={(e) => importFile(e.target.files?.[0])} />
         </div>
       </header>
@@ -132,7 +157,7 @@ export default function IncomeCalculator() {
         <div className="flex flex-col gap-4">
           <Card title="Os seus rendimentos">
             <div className="flex flex-col gap-3">
-              <Field label="Trabalho por conta de outrem (categoria A), bruto" hint="Salário bruto antes de impostos e descontos.">
+              <Field label="Trabalho por conta de outrem (categoria A), bruto" hint="Salário bruto antes de impostos e descontos. Pode importar a declaração Modelo 3 do ano passado (botão Importar).">
                 {(id, d) => (
                   <div className="flex gap-2">
                     <div className="min-w-0 flex-1"><NumberInput id={id} describedBy={d} value={i.employment} suffix="€" onChange={(v) => set("employment", Math.max(0, v))} /></div>
@@ -268,10 +293,11 @@ export default function IncomeCalculator() {
               <summary className="cursor-pointer px-4 py-2.5 font-semibold tracking-tight text-stone-800">Como foi calculado o IRS</summary>
               <dl className="num border-t border-stone-100 p-4">
                 {r.grossEmployment > 0 && <Line label="Categoria A" value={fmtEur(r.grossEmployment, true)} />}
-                {r.irs.irsJovemExemptA > 0 && <Line label="Isento por IRS Jovem (A)" value={`− ${fmtEur(r.irs.irsJovemExemptA, true)}`} />}
                 {r.irs.disabilityExclusionA > 0 && <Line label="Exclusão por incapacidade (A)" value={`− ${fmtEur(r.irs.disabilityExclusionA, true)}`} />}
+                {r.irs.irsJovemExemptA > 0 && <Line label="Isento por IRS Jovem (A)" value={`− ${fmtEur(r.irs.irsJovemExemptA, true)}`} />}
                 {r.grossEmployment > 0 && <Line label="Dedução específica" value={`− ${fmtEur(r.irs.specificDeduction, true)}`} />}
-                {r.irs.irsJovemExemptB > 0 && <Line label="Isento por IRS Jovem (B, bruto)" value={`− ${fmtEur(r.irs.irsJovemExemptB, true)}`} />}
+                {r.irs.disabilityExclusionB > 0 && <Line label="Exclusão por incapacidade (B)" value={`− ${fmtEur(r.irs.disabilityExclusionB, true)}`} />}
+                {r.irs.irsJovemExemptB > 0 && <Line label="Isento por IRS Jovem (B)" value={`− ${fmtEur(r.irs.irsJovemExemptB, true)}`} />}
                 {r.grossSelfEmployed > 0 && <Line label={`Categoria B tributável (${toPct(r.selfEmployedCoefficient)}%)`} value={fmtEur(r.irs.taxableCategoryB, true)} />}
                 <Line label="Rendimento coletável" value={fmtEur(r.irs.taxableIncome, true)} strong />
                 {r.irs.irsJovemExempt > 0 && <Line label="Taxa determinada sobre coletável + isento" value={fmtEur(r.irs.taxableIncome + r.irs.irsJovemExempt, true)} />}

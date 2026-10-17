@@ -110,7 +110,7 @@ export const SOURCES: RuleSource[] = [
     title: "IRS Jovem",
     legalReference: "CIRS art. 12.º-B",
     description:
-      "Durante 10 anos a partir do primeiro ano de rendimentos após os estudos (até aos 35 anos), fica isenta uma parte dos rendimentos brutos das categorias A e B: 100% no 1.º ano, 75% do 2.º ao 4.º, 50% do 5.º ao 7.º e 25% do 8.º ao 10.º, com o limite anual de 55 × IAS. O rendimento isento é englobado para determinar a taxa. A aplicação ao rendimento bruto da categoria B antes do coeficiente foi deduzida de uma nota de liquidação real, não de texto oficial; as condições de elegibilidade não são verificadas.",
+      "Durante 10 anos a partir do primeiro ano de rendimentos após os estudos (até aos 35 anos), fica isenta uma parte dos rendimentos brutos das categorias A e B: 100% no 1.º ano, 75% do 2.º ao 4.º, 50% do 5.º ao 7.º e 25% do 8.º ao 10.º, com o limite anual de 55 × IAS. O rendimento isento é englobado para determinar a taxa. A ordem do cálculo (primeiro a exclusão do art. 56.º-A, depois a isenção, depois o coeficiente da categoria B) foi deduzida reconciliando uma declaração e a respetiva nota de liquidação, não de texto oficial; as condições de elegibilidade não são verificadas.",
     url: "https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs12b.aspx",
     accessed: "2026-10-17",
     verification: "secondary-source",
