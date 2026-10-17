@@ -84,7 +84,10 @@ export interface IncomeResult {
   /** What the other income adds to the net: its gross less the extra IRS it causes. */
   otherNet: number;
   monthsPerYear: number;
+  /** IRS over gross income (everything entered). */
   effectiveIrsRate: number;
+  /** IRS over taxable income plus IRS Jovem exempt income: the "taxa efetiva de tributação" on the nota de liquidação. */
+  assessmentRate: number;
   effectiveTotalRate: number;
   /** Positive = to pay with the annual return, negative = refund. */
   withholdingBalance: number;
@@ -153,6 +156,7 @@ export function calculateIncome(i: IncomeInput, base?: TaxYearRules): IncomeResu
     otherNet: num(net.minus(regularNet)),
     monthsPerYear: perMonth,
     effectiveIrsRate: ratio(irs.finalIrs, gross),
+    assessmentRate: ratio(irs.finalIrs, D(irs.taxableIncome).plus(irs.irsJovemExempt)),
     effectiveTotalRate: ratio(gross.minus(net), gross),
     withholdingBalance: num(D(irs.finalIrs).minus(Math.max(0, i.withholding))),
   };

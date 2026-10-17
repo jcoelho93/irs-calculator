@@ -289,7 +289,8 @@ export default function IncomeCalculator() {
                   <Line label="Rendimento líquido" value={fmtEur(r.netAnnual)} strong />
                   {hasOther && <Line label="dos quais outros rendimentos, após IRS" value={fmtEur(r.otherNet)} />}
                   <div className="my-2 border-t border-stone-200" />
-                  <Line label="Taxa efetiva de IRS" value={fmtPct(r.effectiveIrsRate)} />
+                  <Line label="Taxa efetiva de IRS, sobre o bruto" value={fmtPct(r.effectiveIrsRate)} />
+                  <Line label="Taxa efetiva de tributação, como na nota de liquidação" value={fmtPct(r.assessmentRate)} />
                   <Line label="Taxa efetiva total (IRS + SS)" value={fmtPct(r.effectiveTotalRate)} />
                   <Line label="Taxa marginal de IRS" value={fmtPct(r.irs.marginalRate)} />
                   {i.withholding > 0 && (
@@ -333,6 +334,7 @@ export default function IncomeCalculator() {
         <summary className="cursor-pointer font-medium">Pressupostos, o que não está modelado e fontes</summary>
         <ul className="mt-3 list-disc pl-4 text-stone-700">
           <li>Sujeito passivo único, tributação separada, residente no Continente.</li>
+          <li>A taxa efetiva sobre o bruto divide o IRS por todo o rendimento indicado. A da nota de liquidação divide-o pelo rendimento coletável mais o rendimento isento pelo IRS Jovem, ou seja, depois da dedução específica e do coeficiente da categoria B, por isso é mais alta.</li>
           <li>O IRS é o imposto final estimado na declaração anual. A retenção na fonte mensal pode ser diferente.</li>
           <li>As deduções à coleta são aplicadas como um total, sem os limites globais do art. 78.º para rendimentos mais altos.</li>
           <li>A Segurança Social do trabalhador independente é calculada sobre o ano, sem base mínima nem limite máximo.</li>

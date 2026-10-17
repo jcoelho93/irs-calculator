@@ -164,6 +164,14 @@ describe("income calculator", () => {
   });
 });
 
+describe("effective rates", () => {
+  it("the assessment rate divides IRS by taxable plus IRS Jovem exempt income", () => {
+    const r = inc({ employment: 40000, employmentPeriod: "annual", irsJovemYear: 8 });
+    expect(r.assessmentRate).toBeCloseTo(r.irs.finalIrs / (r.irs.taxableIncome + r.irs.irsJovemExempt), 10);
+    expect(r.assessmentRate).toBeGreaterThan(r.effectiveIrsRate);
+  });
+});
+
 describe("other income", () => {
   const base = { employment: 30000, employmentPeriod: "annual" as const };
   it("taxable other income is taxed with Category A but pays no social security", () => {
