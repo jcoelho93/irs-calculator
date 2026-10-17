@@ -30,7 +30,7 @@ Modelled: Category A brackets, specific deduction (or contributions if higher), 
 coefficients, employee and self-employed social security, deductions from tax as one total, IRS Jovem
 (art. 12-B exemption, exempt income counted to set the rate), benefício municipal, disability >= 60%
 (art. 56-A 85% rule capped at €2,500 per category; art. 87 credit of 4 x IAS), solidarity surcharge,
-withholding balance.
+withholding balance, other taxable income (taxed with Category A, no social security) and non-taxable income.
 
 Not modelled (shown as such in the app): IRS Jovem eligibility checks, mínimo de existência, art. 78 caps on deductions,
 joint taxation, organised accounting, other income categories, autonomous regions.

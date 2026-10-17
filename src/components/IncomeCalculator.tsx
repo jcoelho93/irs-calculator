@@ -130,6 +130,7 @@ export default function IncomeCalculator() {
 
   const r = useMemo(() => calculateIncome(i), [i]);
   const ready = r.grossTotal > 0;
+  const hasOther = r.grossOtherTaxable > 0 || r.grossOtherExempt > 0;
   const changed = ADVANCED_KEYS.filter((k) => JSON.stringify(i[k]) !== JSON.stringify(DEFAULT_INPUT[k])).length;
   const resetAdvanced = () => setI((x) => ({ ...x, ...Object.fromEntries(ADVANCED_KEYS.map((k) => [k, DEFAULT_INPUT[k]])) }));
   const coefPreset = base.categoryBCoefficients.find((c) => c.coefficient === r.selfEmployedCoefficient)?.id ?? "custom";
@@ -168,6 +169,14 @@ export default function IncomeCalculator() {
               <Field label="Trabalho independente (categoria B), bruto anual" hint="Total faturado no ano em recibos verdes, regime simplificado.">
                 {(id, d) => <NumberInput id={id} describedBy={d} value={i.selfEmployed} suffix="€" onChange={(v) => set("selfEmployed", Math.max(0, v))} />}
               </Field>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label="Outros rendimentos tributáveis" hint="Valor pontual no ano que paga IRS mas não Segurança Social. É somado à categoria A.">
+                  {(id, d) => <NumberInput id={id} describedBy={d} value={i.otherTaxable} suffix="€" onChange={(v) => set("otherTaxable", Math.max(0, v))} />}
+                </Field>
+                <Field label="Rendimentos não tributáveis" hint="Valor no ano que não paga IRS nem Segurança Social.">
+                  {(id, d) => <NumberInput id={id} describedBy={d} value={i.otherExempt} suffix="€" onChange={(v) => set("otherExempt", Math.max(0, v))} />}
+                </Field>
+              </div>
               <Field label="Deduções à coleta" hint="Despesas gerais, saúde, educação, habitação, dependentes, IVA de faturas. Se ainda não sabe, importe a nota de liquidação do ano passado (botão Importar).">
                 {(id, d) => <NumberInput id={id} describedBy={d} value={i.taxDeductions} suffix="€" onChange={(v) => set("taxDeductions", Math.max(0, v))} />}
               </Field>
@@ -267,15 +276,18 @@ export default function IncomeCalculator() {
               <>
                 <div className="mb-3 grid grid-cols-2 gap-3">
                   <Stat label="Líquido por ano" value={fmtEur(r.netAnnual)} />
-                  <Stat label={`Líquido por mês (× ${r.monthsPerYear})`} value={fmtEur(r.netPerMonth)} />
+                  <Stat label={`Líquido por mês (× ${r.monthsPerYear})${hasOther ? ", sem outros rendimentos" : ""}`} value={fmtEur(r.netPerMonth)} />
                 </div>
                 <dl aria-label="Estimativa anual" className="num text-sm">
                   {r.grossEmployment > 0 && <Line label="Bruto, categoria A" value={fmtEur(r.grossEmployment)} />}
                   {r.grossSelfEmployed > 0 && <Line label="Bruto, categoria B" value={fmtEur(r.grossSelfEmployed)} />}
+                  {r.grossOtherTaxable > 0 && <Line label="Outros rendimentos tributáveis" value={fmtEur(r.grossOtherTaxable)} />}
+                  {r.grossOtherExempt > 0 && <Line label="Rendimentos não tributáveis" value={fmtEur(r.grossOtherExempt)} />}
                   <Line label="Rendimento bruto" value={fmtEur(r.grossTotal)} strong />
                   <Line label="Segurança Social" value={`− ${fmtEur(r.socialSecurity)}`} />
                   <Line label="IRS" value={`− ${fmtEur(r.irs.finalIrs)}`} />
                   <Line label="Rendimento líquido" value={fmtEur(r.netAnnual)} strong />
+                  {hasOther && <Line label="dos quais outros rendimentos, após IRS" value={fmtEur(r.otherNet)} />}
                   <div className="my-2 border-t border-stone-200" />
                   <Line label="Taxa efetiva de IRS" value={fmtPct(r.effectiveIrsRate)} />
                   <Line label="Taxa efetiva total (IRS + SS)" value={fmtPct(r.effectiveTotalRate)} />
@@ -293,9 +305,10 @@ export default function IncomeCalculator() {
               <summary className="cursor-pointer px-4 py-2.5 font-semibold tracking-tight text-stone-800">Como foi calculado o IRS</summary>
               <dl className="num border-t border-stone-100 p-4">
                 {r.grossEmployment > 0 && <Line label="Categoria A" value={fmtEur(r.grossEmployment, true)} />}
+                {r.grossOtherTaxable > 0 && <Line label="Outros rendimentos tributáveis (com a categoria A)" value={`+ ${fmtEur(r.grossOtherTaxable, true)}`} />}
                 {r.irs.disabilityExclusionA > 0 && <Line label="Exclusão por incapacidade (A)" value={`− ${fmtEur(r.irs.disabilityExclusionA, true)}`} />}
                 {r.irs.irsJovemExemptA > 0 && <Line label="Isento por IRS Jovem (A)" value={`− ${fmtEur(r.irs.irsJovemExemptA, true)}`} />}
-                {r.grossEmployment > 0 && <Line label="Dedução específica" value={`− ${fmtEur(r.irs.specificDeduction, true)}`} />}
+                {r.irs.grossCategoryA > 0 && <Line label="Dedução específica" value={`− ${fmtEur(r.irs.specificDeduction, true)}`} />}
                 {r.irs.disabilityExclusionB > 0 && <Line label="Exclusão por incapacidade (B)" value={`− ${fmtEur(r.irs.disabilityExclusionB, true)}`} />}
                 {r.irs.irsJovemExemptB > 0 && <Line label="Isento por IRS Jovem (B)" value={`− ${fmtEur(r.irs.irsJovemExemptB, true)}`} />}
                 {r.grossSelfEmployed > 0 && <Line label={`Categoria B tributável (${toPct(r.selfEmployedCoefficient)}%)`} value={fmtEur(r.irs.taxableCategoryB, true)} />}

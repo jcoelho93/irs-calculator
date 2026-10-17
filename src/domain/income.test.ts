@@ -164,6 +164,34 @@ describe("income calculator", () => {
   });
 });
 
+describe("other income", () => {
+  const base = { employment: 30000, employmentPeriod: "annual" as const };
+  it("taxable other income is taxed with Category A but pays no social security", () => {
+    const a = inc(base);
+    const r = inc({ ...base, otherTaxable: 10000 });
+    expect(r.irs.grossCategoryA).toBe(40000);
+    expect(r.socialSecurity).toBe(a.socialSecurity);
+    expect(r.irs.finalIrs).toBeGreaterThan(a.irs.finalIrs);
+    expect(r.otherNet).toBeCloseTo(10000 - (r.irs.finalIrs - a.irs.finalIrs), 2);
+  });
+  it("non-taxable income adds to the net only", () => {
+    const a = inc(base);
+    const r = inc({ ...base, otherExempt: 5000 });
+    expect(r.irs.finalIrs).toBe(a.irs.finalIrs);
+    expect(r.netAnnual).toBeCloseTo(a.netAnnual + 5000, 2);
+    expect(r.grossTotal).toBe(35000);
+    expect(r.otherNet).toBe(5000);
+  });
+  it("the monthly net leaves other income out", () => {
+    expect(inc({ ...base, otherTaxable: 10000, otherExempt: 5000 }).netPerMonth).toBe(inc(base).netPerMonth);
+  });
+  it("works with other income alone", () => {
+    const r = inc({ otherTaxable: 20000 });
+    expect(r.irs.specificDeduction).toBe(4587.09);
+    expect(r.netPerMonth).toBe(0);
+  });
+});
+
 describe("tax years", () => {
   it("loads rules by year and rejects unknown ones", () => {
     expect(getTaxRules(2026).taxYear).toBe(2026);
