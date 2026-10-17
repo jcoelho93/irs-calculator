@@ -71,9 +71,9 @@ export function NumberInput({ id, describedBy, ariaLabel, value, onChange, step 
   );
 }
 
-export function Select({ id, ariaLabel, value, onChange, options }: { id?: string; ariaLabel?: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+export function Select({ id, describedBy, ariaLabel, value, onChange, options }: { id?: string; describedBy?: string; ariaLabel?: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
   return (
-    <select id={id} aria-label={ariaLabel} className={selectCls} value={value} onChange={(e) => onChange(e.target.value)}>
+    <select id={id} aria-describedby={describedBy} aria-label={ariaLabel} className={selectCls} value={value} onChange={(e) => onChange(e.target.value)}>
       {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
   );

@@ -16,6 +16,10 @@ export interface IrsInput {
   socialSecurityContributions: number;
   /** Deductions from tax (deduções à coleta): dependents, general expenses, health, education, housing... */
   otherTaxDeductions?: number;
+  /** IRS Jovem benefit year (1-10); 0 or absent = not applicable. */
+  irsJovemYear?: number;
+  /** Share of the net tax handed back by the municipality (0.05 = 5%). */
+  municipalBenefit?: number;
 }
 
 export interface IrsBreakdown {
@@ -24,18 +28,26 @@ export interface IrsBreakdown {
   disabilityExclusion: number;
   disabilityExclusionA: number;
   disabilityExclusionB: number;
+  /** IRS Jovem: gross A + B income exempted (art. 12-B), counted only to set the rate. */
+  irsJovemExempt: number;
+  irsJovemExemptA: number;
+  irsJovemExemptB: number;
   /** Category B income taxable after the regime and art. 56-A. */
   taxableCategoryB: number;
   consideredIncome: number;
   specificDeduction: number;
   taxableIncome: number;
-  /** Tax on taxable income via progressive brackets (coleta). */
+  /** Tax on taxable income via progressive brackets, after removing the share of exempt income. */
   bracketTax: number;
+  /** Bracket tax plus solidarity surcharge (coleta total). */
+  grossTax: number;
   /** art. 87 credit actually used. */
   disabilityCredit: number;
   /** Other deductions from tax actually used (capped at the remaining tax). */
   otherDeductions: number;
   solidaritySurcharge: number;
+  /** Benefício municipal handed back. */
+  municipalBenefit: number;
   finalIrs: number;
   marginalRate: number;
 }
@@ -73,43 +85,64 @@ export function solidaritySurcharge(taxable: Decimal.Value, rules: TaxYearRules)
 
 /**
  * Estimated FINAL annual IRS (liquidation) for a single taxpayer with Category A and B income.
- * Deductions from tax are taken as one total. Not modelled: mínimo de existência (art. 70),
+ * Deductions from tax are taken as one total. Includes IRS Jovem and the benefício municipal. Not modelled: mínimo de existência (art. 70),
  * art. 78 caps on deductions, joint taxation (quociente conjugal), other categories, autonomous rates.
  */
 export function calculateIrs(input: IrsInput, rules: TaxYearRules): IrsBreakdown {
-  const gross = D(Math.max(0, input.grossCategoryA));
+  const grossAIn = D(Math.max(0, input.grossCategoryA));
+  const bGrossIn = D(Math.max(0, input.categoryB?.gross ?? 0));
   const disabled = hasFiscalDisability(input.disabilityPct, rules);
   const d = rules.disability;
 
   // art. 56-A: only 85% considered; the excluded part is capped PER CATEGORY.
   const exclude = (g: Decimal) => (disabled ? min(g.mul(1 - d.categoryAConsideredShare), d.maxExcludedPerCategory) : ZERO);
+  const exclA = exclude(grossAIn);
+  const exclB = exclude(bGrossIn);
 
-  const exclA = exclude(gross);
-  const consideredA = gross.minus(exclA);
+  // art. 12-B (IRS Jovem): a share of what remains is exempt, with one cap for A and B together.
+  // Order (art. 56-A first, then IRS Jovem, then the B coefficient) reconciles exactly with a real
+  // assessment; the A-before-B order for the cap is not confirmed.
+  const jy = Math.floor(input.irsJovemYear ?? 0);
+  const share = jy >= 1 ? (rules.irsJovem.exemptShareByYear[jy - 1] ?? 0) : 0;
+  const cap = D(rules.ias).mul(rules.irsJovem.capIasMultiple);
+  const jovemA = min(grossAIn.minus(exclA).mul(share), cap);
+  const jovemB = min(bGrossIn.minus(exclB).mul(share), cap.minus(jovemA));
+  const exempt = jovemA.plus(jovemB);
 
-  // Category B: no art. 25 specific deduction.
-  const bGross = D(Math.max(0, input.categoryB?.gross ?? 0));
-  const bTaxableRaw = min(D(Math.max(0, input.categoryB?.taxable ?? 0)), bGross);
-  const exclB = exclude(bGross);
-  const consideredB = bGross.minus(exclB);
-  const taxableB = bGross.isZero() ? ZERO : consideredB.mul(bTaxableRaw).div(bGross);
+  const consideredA = grossAIn.minus(exclA).minus(jovemA);
+
+  // Category B: no art. 25 specific deduction. The regime coefficient (taxable/gross) is applied
+  // to what is left after art. 56-A and IRS Jovem.
+  const bTaxableRaw = min(D(Math.max(0, input.categoryB?.taxable ?? 0)), bGrossIn);
+  const consideredB = bGrossIn.minus(exclB).minus(jovemB);
+  const taxableB = bGrossIn.isZero() ? ZERO : consideredB.mul(bTaxableRaw).div(bGrossIn);
 
   // art. 25: greater of the fixed deduction and mandatory contributions; can't exceed Cat A income.
   const specific = min(max(rules.specificDeductionCatA, D(input.socialSecurityContributions)), consideredA);
   const taxable = max(consideredA.minus(specific).plus(taxableB), 0);
 
-  const { tax, marginal } = progressiveTax(taxable, rules);
+  // Exempt income is added to set the rate, then the tax on it is removed: tax on (taxable + exempt)
+  // scaled by taxable / (taxable + exempt).
+  const rateBase = taxable.plus(exempt);
+  const { tax: rateTax, marginal } = progressiveTax(rateBase, rules);
+  const tax = rateBase.isZero() ? ZERO : rateTax.mul(taxable).div(rateBase);
   const bracketTax = cents(tax);
-
-  // art. 87: one credit per taxpayer (not per category), cannot make tax negative.
-  const credit = cents(disabled ? min(bracketTax, D(rules.ias).mul(d.taxpayerCreditIasMultiple)) : ZERO);
-  // Other deductions from tax also cannot make it negative (art. 78 caps for high incomes not modelled).
-  const other = cents(min(max(D(input.otherTaxDeductions ?? 0), 0), bracketTax.minus(credit)));
   const solidarity = cents(solidaritySurcharge(taxable, rules));
-  const final = bracketTax.minus(credit).minus(other).plus(solidarity);
+  const grossTax = bracketTax.plus(solidarity);
+
+  // art. 87: one credit per taxpayer (not per category). Neither it nor the other deductions can
+  // make the tax negative (art. 78 caps for high incomes not modelled).
+  const credit = cents(disabled ? min(grossTax, D(rules.ias).mul(d.taxpayerCreditIasMultiple)) : ZERO);
+  const other = cents(min(max(D(input.otherTaxDeductions ?? 0), 0), grossTax.minus(credit)));
+  const net = grossTax.minus(credit).minus(other);
+  const mShare = Math.min(Math.max(input.municipalBenefit ?? 0, 0), rules.maxMunicipalBenefit);
+  const municipal = cents(net.mul(mShare));
 
   return {
-    grossCategoryA: num(gross),
+    grossCategoryA: num(grossAIn),
+    irsJovemExempt: num(exempt),
+    irsJovemExemptA: num(jovemA),
+    irsJovemExemptB: num(jovemB),
     disabilityExclusion: num(exclA.plus(exclB)),
     disabilityExclusionA: num(exclA),
     disabilityExclusionB: num(exclB),
@@ -118,10 +151,12 @@ export function calculateIrs(input: IrsInput, rules: TaxYearRules): IrsBreakdown
     specificDeduction: num(specific),
     taxableIncome: num(taxable),
     bracketTax: num(bracketTax),
+    grossTax: num(grossTax),
     disabilityCredit: num(credit),
     otherDeductions: num(other),
     solidaritySurcharge: num(solidarity),
-    finalIrs: num(max(final, 0)),
-    marginalRate: taxable.isZero() ? rules.brackets[0].rate : marginal,
+    municipalBenefit: num(municipal),
+    finalIrs: num(max(net.minus(municipal), 0)),
+    marginalRate: rateBase.isZero() ? rules.brackets[0].rate : marginal,
   };
 }

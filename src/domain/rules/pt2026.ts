@@ -26,6 +26,8 @@ export const PT_2026: TaxYearRules = {
     { from: 80000, to: 250000, rate: 0.025 },
     { from: 250000, to: null, rate: 0.05 },
   ],
+  irsJovem: { exemptShareByYear: [1, 0.75, 0.75, 0.75, 0.5, 0.5, 0.5, 0.25, 0.25, 0.25], capIasMultiple: 55 },
+  maxMunicipalBenefit: 0.05,
   socialSecurity: { employeeRate: 0.11, selfEmployedRate: 0.214, selfEmployedBase: 0.7 },
   categoryBCoefficients: [
     { id: "professional", label: "Atividades profissionais da tabela do art. 151.º", coefficient: 0.75 },
@@ -40,5 +42,7 @@ export const PT_2026: TaxYearRules = {
     "solidarity-68a",
     "category-b-coefficients",
     "social-security",
+    "irs-jovem",
+    "municipal-benefit",
   ],
 };

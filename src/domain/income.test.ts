@@ -6,6 +6,9 @@ import { PT_2026 } from "./rules/pt2026";
 import type { TaxYearRules } from "./rules/types";
 import { DEFAULT_INPUT, calculateIncome } from "./income";
 import type { IncomeInput } from "./income";
+import { NotAModelo3Error, parseModelo3, patchFromModelo3 } from "./modelo3";
+import { NotALiquidacaoError, parseLiquidacao, patchFromLiquidacao } from "./liquidacao";
+import { FILE_KIND, FILE_VERSION, InvalidFileError, parseSavedFile, sanitizeInput, serializeInput } from "./file";
 
 const inc = (p: Partial<IncomeInput>) => calculateIncome({ ...DEFAULT_INPUT, ...p });
 
@@ -171,5 +174,162 @@ describe("tax years", () => {
     const reg = { ...taxRules, "2099": alt };
     const r = calculateIncome({ ...DEFAULT_INPUT, taxYear: 2099, employment: 30000, employmentPeriod: "annual", employeeSsRate: 0 }, getTaxRules(2099, reg));
     expect(r.irs.finalIrs).toBe(15000);
+  });
+});
+
+describe("export / import", () => {
+  const sample: IncomeInput = { ...DEFAULT_INPUT, employment: 2500, selfEmployed: 10000, taxDeductions: 900, brackets: [{ upTo: 10000, rate: 0.1 }, { upTo: null, rate: 0.3 }], solidarity: false };
+  it("round-trips every field", () => {
+    expect(parseSavedFile(serializeInput(sample))).toEqual(sample);
+  });
+  it("rejects invalid JSON and files from other apps", () => {
+    expect(() => parseSavedFile("not json")).toThrow(InvalidFileError);
+    expect(() => parseSavedFile(JSON.stringify({ input: sample }))).toThrow(InvalidFileError);
+    expect(() => parseSavedFile(JSON.stringify({ kind: FILE_KIND, version: FILE_VERSION + 1, input: sample }))).toThrow(InvalidFileError);
+  });
+  it("drops unknown or malformed fields and keeps defaults", () => {
+    const r = sanitizeInput({ irsJovemYear: 12, employment: "abc", selfEmployed: 5000, employmentPeriod: "weekly", taxYear: 1999, brackets: [{ rate: "x" }], extra: 1 });
+    expect(r).toEqual({ ...DEFAULT_INPUT, selfEmployed: 5000 });
+  });
+});
+
+describe("IRS Jovem (art. 12-B)", () => {
+  const irs = (a: number, year: number, b = 0) =>
+    calculateIrs({ grossCategoryA: a, categoryB: { gross: b, taxable: b * 0.75 }, disabilityPct: 0, socialSecurityContributions: 0, irsJovemYear: year }, PT_2026);
+  it("exempts the share for the benefit year", () => {
+    expect(irs(40000, 8).irsJovemExemptA).toBe(10000); // 25%
+    expect(irs(40000, 5).irsJovemExemptA).toBe(20000); // 50%
+    expect(irs(40000, 0).irsJovemExempt).toBe(0);
+    expect(irs(40000, 11).irsJovemExempt).toBe(0);
+  });
+  it("caps the exemption at 55 x IAS across A and B", () => {
+    const r = irs(25000, 1, 10000);
+    expect(r.irsJovemExemptA).toBe(25000);
+    expect(r.irsJovemExemptB).toBe(4542.15); // 29,542.15 - 25,000
+    expect(r.irsJovemExempt).toBe(29542.15);
+  });
+  it("applies the B coefficient to what is left after the exemption", () => {
+    expect(irs(0, 8, 10000).taxableCategoryB).toBe(5625); // (10,000 - 2,500) x 0.75
+  });
+  it("applies after the art. 56-A disability exclusion and before the B coefficient", () => {
+    const r = calculateIrs({ grossCategoryA: 40000, categoryB: { gross: 10000, taxable: 7500 }, disabilityPct: 60, socialSecurityContributions: 0, irsJovemYear: 8 }, PT_2026);
+    expect(r.disabilityExclusionA).toBe(2500);
+    expect(r.disabilityExclusionB).toBe(1500);
+    expect(r.irsJovemExemptA).toBe(9375); // (40,000 - 2,500) x 25%
+    expect(r.irsJovemExemptB).toBe(2125); // (10,000 - 1,500) x 25%
+    expect(r.taxableCategoryB).toBe(4781.25); // (10,000 - 1,500 - 2,125) x 0.75
+  });
+  it("exempt income sets the rate but is not taxed", () => {
+    const r = irs(40000, 8);
+    const base = r.taxableIncome + r.irsJovemExempt;
+    const expected = progressiveTax(base, PT_2026).tax.mul(r.taxableIncome).div(base);
+    expect(r.bracketTax).toBe(cents(expected).toNumber());
+    expect(r.finalIrs).toBeLessThan(irs(40000, 0).finalIrs);
+    expect(r.finalIrs).toBeGreaterThan(irs(30000, 0).finalIrs); // higher rate than plain 30,000
+  });
+});
+
+describe("benefício municipal", () => {
+  it("hands back a share of the tax after deductions", () => {
+    const base = { grossCategoryA: 40000, disabilityPct: 0, socialSecurityContributions: 0, otherTaxDeductions: 1000 };
+    const r = calculateIrs({ ...base, municipalBenefit: 0.02 }, PT_2026);
+    expect(r.municipalBenefit).toBe(cents(D(r.grossTax).minus(1000).mul(0.02)).toNumber());
+    expect(r.finalIrs).toBeCloseTo(r.grossTax - 1000 - r.municipalBenefit, 2);
+  });
+  it("is capped at 5%", () => {
+    const base = { grossCategoryA: 40000, disabilityPct: 0, socialSecurityContributions: 0 };
+    expect(calculateIrs({ ...base, municipalBenefit: 0.5 }, PT_2026).municipalBenefit).toBe(calculateIrs({ ...base, municipalBenefit: 0.05 }, PT_2026).municipalBenefit);
+  });
+});
+
+/** Text as pdf.js extracts it from a demonstração de liquidação. All figures and ids are made up. */
+const LIQ = `Demonstração de Liquidação de IRS
+Sujeito Passivo Número de Liquidação Período de Rendimentos
+100000002 2026.5000000001 2025-01-01 a 2025-12-31
+Descrição Valores
+1 RENDIMENTO GLOBAL 40.000,00
+18 COLETA TOTAL [(11-12)x(1,00)+13-14+15+16+17] 9.000,00
+19 Deduções à coleta 3.100,50
+20 Benefício Municipal (2,50% da coleta) 147,49
+22 COLETA LÍQUIDA (18 - 19 - 20 (>=0) + 21) 5.752,01
+24 Retenções na fonte 6.000,00
+Regime IRS Jovem
+Titular Ano de obtenção de rendimentos
+Sujeito Passivo A 3º ano
+Sujeito Passivo B / Cônjuge Falecido -
+Deduções à Coleta Valor Despesa Dedução
+Dedução despesas gerais e familiares 9.000,00 250,00
+Dedução pessoas com deficiência 0,00 2.090,00
+Total das Deduções : 3.100,50
+Dedução Efetiva : 3.100,50`;
+
+describe("nota de liquidação import", () => {
+  it("reads the applied deductions, disability, municipal benefit and IRS Jovem year", () => {
+    const l = parseLiquidacao(LIQ);
+    expect(l).toEqual({ year: 2025, deductionsApplied: 3100.5, disabilityDeduction: 2090, municipalBenefit: 0.025, irsJovemYear: 3, withholding: 6000, netTax: 5752.01 });
+  });
+  it("leaves the disability credit out and moves IRS Jovem to the tax year", () => {
+    expect(patchFromLiquidacao(parseLiquidacao(LIQ), 2026)).toEqual({ taxDeductions: 1010.5, hasDisability: true, municipalBenefit: 0.025, irsJovemYear: 4 });
+  });
+  it("stops IRS Jovem after the 10th year and handles its absence", () => {
+    expect(patchFromLiquidacao(parseLiquidacao(LIQ.replace("3º ano", "10º ano")), 2026).irsJovemYear).toBe(0);
+    expect(patchFromLiquidacao(parseLiquidacao(LIQ.replace("Sujeito Passivo A 3º ano", "Sujeito Passivo A -")), 2026).irsJovemYear).toBe(0);
+  });
+  it("rejects other documents", () => {
+    expect(() => parseLiquidacao("Fatura n.º 1")).toThrow(NotALiquidacaoError);
+    expect(() => parseLiquidacao("Demonstração de Liquidação de IRS\nnada")).toThrow(NotALiquidacaoError);
+  });
+});
+
+/** Pages as pdf.js extracts them from a Modelo 3 comprovativo. All figures and ids are made up. */
+const M3 = [
+  `Comprovativo Mod.3 IRS: 100000002 / 2025 / 0000-X0000-00 Página 1 de 3
+DECLARAÇÃO DE RENDIMENTOS - IRS
+MODELO 3
+1 Anexo A 1 8 Anexo G1`,
+  `1 CATEGORIAS A / H 2 ANO DOS RENDIMENTOS
+01 2025
+MODELO 3 PENSÕES
+Anexo A
+500000000 401 A 30.000,00 4.000,00 3.300,00 0,00
+500000000 414 A 2.000,00 0,00
+SOMA DE CONTROLO 32.000,00 4.000,00 3.300,00 0,00 0,00`,
+  `DECLARAÇÃO DE RENDIMENTOS - IRS 01 2025
+MODELO 3
+Anexo B
+A RENDIMENTOS PROFISSIONAIS, COMERCIAIS E INDUSTRIAIS VALOR
+Vendas de mercadorias e produtos 401 1.000,00
+Rendimento das atividades profissionais especificamente previstas na Tabela do art.º 151.º do CIRS 403 3.000,00
+Rendimentos de prestações de serviços não previstos nos campos anteriores 404
+Propriedade intelectual (não abrangida pelo art.º 58.º do EBF), industrial ou de prestação de informações 405 500,00
+SOMA 4.500,00
+B RENDIMENTOS AGRÍCOLAS, SILVÍCOLAS E PECUÁRIOS VALOR
+Prestações de serviços 452 9.999,00`,
+];
+
+describe("Modelo 3 import", () => {
+  it("reads Anexo A totals and Anexo B amounts by code", () => {
+    expect(parseModelo3(M3)).toEqual({
+      year: 2025,
+      employment: { income: 32000, withholding: 4000, contributions: 3300 },
+      selfEmployed: [{ code: "401", amount: 1000 }, { code: "403", amount: 3000 }, { code: "405", amount: 500 }],
+    });
+  });
+  it("derives the SS rate and a weighted coefficient, skipping unknown codes", () => {
+    expect(patchFromModelo3(parseModelo3(M3))).toEqual({
+      employment: 32000,
+      employeeSsRate: 0.103125,
+      selfEmployed: 4000,
+      selfEmployedCoefficient: 0.6, // (1,000 x 0.15 + 3,000 x 0.75) / 4,000
+      skippedCodes: ["405"],
+    });
+  });
+  it("works with only one of the annexes", () => {
+    expect(parseModelo3([M3[0], M3[2]]).employment).toBeNull();
+    expect(parseModelo3([M3[0], M3[1]]).selfEmployed).toEqual([]);
+  });
+  it("rejects other documents", () => {
+    expect(() => parseModelo3(["Fatura"])).toThrow(NotAModelo3Error);
+    expect(() => parseModelo3([M3[0]])).toThrow(NotAModelo3Error);
   });
 });
