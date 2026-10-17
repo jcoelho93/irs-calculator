@@ -100,14 +100,14 @@ export default function IncomeCalculator() {
         </p>
       )}
 
-      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <div className="flex flex-col gap-4">
           <Card title="Os seus rendimentos">
             <div className="flex flex-col gap-3">
               <Field label="Trabalho por conta de outrem (categoria A), bruto" hint="Salário bruto antes de impostos e descontos.">
                 {(id, d) => (
                   <div className="flex gap-2">
-                    <div className="flex-1"><NumberInput id={id} describedBy={d} value={i.employment} suffix="€" onChange={(v) => set("employment", Math.max(0, v))} /></div>
+                    <div className="min-w-0 flex-1"><NumberInput id={id} describedBy={d} value={i.employment} suffix="€" onChange={(v) => set("employment", Math.max(0, v))} /></div>
                     <Select ariaLabel="Período" value={i.employmentPeriod} onChange={(v) => set("employmentPeriod", v as PayPeriod)} options={PERIODS.map((p) => ({ value: p.id, label: p.label }))} />
                   </div>
                 )}
@@ -121,7 +121,7 @@ export default function IncomeCalculator() {
             </div>
           </Card>
 
-          <details className="rounded-lg border border-stone-200 bg-white">
+          <details className="min-w-0 rounded-lg border border-stone-200 bg-white">
             <summary className="cursor-pointer px-4 py-2.5 text-sm font-semibold tracking-tight text-stone-800">
               Opções avançadas {changed > 0 && <span className="ml-1 text-xs font-normal text-blue-700">({changed} alterada{changed > 1 ? "s" : ""})</span>}
             </summary>
@@ -145,7 +145,7 @@ export default function IncomeCalculator() {
               <Field label="Atividade (coeficiente do regime simplificado)">
                 {(id) => (
                   <div className="flex gap-2">
-                    <div className="flex-1">
+                    <div className="min-w-0 flex-1">
                       <Select
                         id={id}
                         value={coefPreset}
