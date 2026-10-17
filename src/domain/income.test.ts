@@ -1,0 +1,175 @@
+import { describe, expect, it } from "vitest";
+import { calculateIrs, progressiveTax } from "./tax/irs";
+import { D, cents } from "./money";
+import { getTaxRules, taxRules, UnsupportedTaxYearError } from "./rules";
+import { PT_2026 } from "./rules/pt2026";
+import type { TaxYearRules } from "./rules/types";
+import { DEFAULT_INPUT, calculateIncome } from "./income";
+import type { IncomeInput } from "./income";
+
+const inc = (p: Partial<IncomeInput>) => calculateIncome({ ...DEFAULT_INPUT, ...p });
+
+describe("money / rounding", () => {
+  it("avoids binary float error", () => {
+    expect(D(0.1).plus(0.2).toNumber()).toBe(0.3);
+  });
+  it("rounds half-up at cent level", () => {
+    expect(cents("1.005").toNumber()).toBe(1.01);
+    expect(cents("1.004").toNumber()).toBe(1);
+    expect(cents("2.675").toNumber()).toBe(2.68);
+  });
+});
+
+describe("IRS calculation", () => {
+  it("progressive slicing", () => {
+    // 10,000: 8,342*12.5% + 1,658*15.7% = 1042.75 + 260.306 = 1303.056
+    expect(progressiveTax(10000, PT_2026).tax.toNumber()).toBeCloseTo(1303.056, 6);
+  });
+  it("zero income gives zero tax", () => {
+    expect(calculateIrs({ grossCategoryA: 0, disabilityPct: 0, socialSecurityContributions: 0 }, PT_2026).finalIrs).toBe(0);
+  });
+  it("applies the specific deduction (or contributions if higher)", () => {
+    expect(calculateIrs({ grossCategoryA: 20000, disabilityPct: 0, socialSecurityContributions: 0 }, PT_2026).specificDeduction).toBe(4587.09);
+    expect(calculateIrs({ grossCategoryA: 60000, disabilityPct: 0, socialSecurityContributions: 6600 }, PT_2026).specificDeduction).toBe(6600);
+  });
+  it("disability >= 60%: art. 56-A exclusion capped and art. 87 credit applied", () => {
+    const d = calculateIrs({ grossCategoryA: 50000, disabilityPct: 60, socialSecurityContributions: 0 }, PT_2026);
+    expect(d.disabilityExclusion).toBe(2500); // 15% = 7,500 capped at 2,500
+    expect(d.disabilityCredit).toBe(2148.52); // 4 x 537.13
+    const n = calculateIrs({ grossCategoryA: 50000, disabilityPct: 59, socialSecurityContributions: 0 }, PT_2026);
+    expect(n.disabilityExclusion).toBe(0);
+    expect(n.disabilityCredit).toBe(0);
+    expect(d.finalIrs).toBeLessThan(n.finalIrs);
+  });
+  it("art. 56-A exclusion is 15% below the cap", () => {
+    expect(calculateIrs({ grossCategoryA: 10000, disabilityPct: 60, socialSecurityContributions: 0 }, PT_2026).disabilityExclusion).toBe(1500);
+  });
+  it("credit cannot make tax negative", () => {
+    const d = calculateIrs({ grossCategoryA: 6000, disabilityPct: 60, socialSecurityContributions: 0 }, PT_2026);
+    expect(d.finalIrs).toBeGreaterThanOrEqual(0);
+  });
+  it("solidarity surcharge above 80k taxable", () => {
+    const r = calculateIrs({ grossCategoryA: 300000, disabilityPct: 0, socialSecurityContributions: 0 }, PT_2026);
+    expect(r.solidaritySurcharge).toBeGreaterThan(0);
+  });
+});
+
+describe("category B and disability (art. 56-A per category)", () => {
+  const A = (g: number, pct: number, b?: { gross: number; taxable: number }) =>
+    calculateIrs({ grossCategoryA: g, categoryB: b, disabilityPct: pct, socialSecurityContributions: 0 }, PT_2026);
+  it("the 2,500 cap applies separately to each category", () => {
+    const r = A(50000, 60, { gross: 50000, taxable: 50000 });
+    expect(r.disabilityExclusionA).toBe(2500);
+    expect(r.disabilityExclusionB).toBe(2500);
+    expect(r.disabilityExclusion).toBe(5000);
+  });
+  it("a category below the cap excludes 15% of its own gross", () => {
+    const r = A(0, 60, { gross: 10000, taxable: 10000 });
+    expect(r.disabilityExclusionB).toBe(1500);
+    expect(r.disabilityExclusionA).toBe(0);
+  });
+  it("category B has no specific deduction", () => {
+    const r = A(0, 0, { gross: 20000, taxable: 20000 });
+    expect(r.specificDeduction).toBe(0);
+    expect(r.taxableIncome).toBe(20000);
+  });
+  it("B taxable is scaled by taxable/gross after the exclusion", () => {
+    const r = A(0, 60, { gross: 40000, taxable: 30000 });
+    expect(r.taxableCategoryB).toBe(28125); // (40000 - 2500) x 0.75
+  });
+  it("taxable B cannot exceed gross B", () => {
+    expect(A(0, 0, { gross: 10000, taxable: 99999 }).taxableIncome).toBe(10000);
+  });
+  it("the art. 87 credit is applied once, not per category", () => {
+    const r = A(50000, 60, { gross: 50000, taxable: 50000 });
+    expect(r.disabilityCredit).toBe(2148.52);
+  });
+  it("without B input results are unchanged", () => {
+    expect(A(30000, 60).taxableIncome).toBe(A(30000, 60, { gross: 0, taxable: 0 }).taxableIncome);
+  });
+});
+
+describe("other deductions from tax", () => {
+  it("are subtracted from the tax", () => {
+    const a = calculateIrs({ grossCategoryA: 30000, disabilityPct: 0, socialSecurityContributions: 0 }, PT_2026);
+    const b = calculateIrs({ grossCategoryA: 30000, disabilityPct: 0, socialSecurityContributions: 0, otherTaxDeductions: 1000 }, PT_2026);
+    expect(b.otherDeductions).toBe(1000);
+    expect(b.finalIrs).toBeCloseTo(a.finalIrs - 1000, 2);
+  });
+  it("cannot make tax negative and stack after the disability credit", () => {
+    const r = calculateIrs({ grossCategoryA: 12000, disabilityPct: 60, socialSecurityContributions: 0, otherTaxDeductions: 99999 }, PT_2026);
+    expect(r.finalIrs).toBe(0);
+    expect(r.disabilityCredit + r.otherDeductions).toBe(r.bracketTax);
+  });
+});
+
+describe("income calculator", () => {
+  it("empty input gives zeros", () => {
+    const r = inc({});
+    expect(r.grossTotal).toBe(0);
+    expect(r.irs.finalIrs).toBe(0);
+    expect(r.netAnnual).toBe(0);
+  });
+  it("monthly x 14 employment: SS 11%, contributions used as specific deduction when higher", () => {
+    const r = inc({ employment: 3000, employmentPeriod: "monthly14" });
+    expect(r.grossEmployment).toBe(42000);
+    expect(r.ssEmployment).toBe(4620);
+    expect(r.irs.specificDeduction).toBe(4620);
+    expect(r.irs.taxableIncome).toBe(37380);
+    expect(r.netAnnual).toBeCloseTo(42000 - 4620 - r.irs.finalIrs, 2);
+    expect(r.netPerMonth).toBeCloseTo(r.netAnnual / 14, 2);
+  });
+  it("period changes the annual gross", () => {
+    expect(inc({ employment: 1000, employmentPeriod: "monthly12" }).grossEmployment).toBe(12000);
+    expect(inc({ employment: 12000, employmentPeriod: "annual" }).grossEmployment).toBe(12000);
+    expect(inc({ employment: 12000, employmentPeriod: "annual" }).monthsPerYear).toBe(12);
+  });
+  it("category B: default 75% coefficient and SS 21.4% on 70%", () => {
+    const r = inc({ selfEmployed: 40000 });
+    expect(r.irs.taxableCategoryB).toBe(30000);
+    expect(r.ssSelfEmployed).toBe(5992);
+    expect(r.irs.specificDeduction).toBe(0);
+  });
+  it("custom coefficient and SS overrides are honoured", () => {
+    const r = inc({ selfEmployed: 40000, selfEmployedCoefficient: 0.35, selfEmployedSsRate: 0 });
+    expect(r.irs.taxableCategoryB).toBe(14000);
+    expect(r.ssSelfEmployed).toBe(0);
+  });
+  it("A and B are taxed together", () => {
+    const both = inc({ employment: 30000, employmentPeriod: "annual", selfEmployed: 20000 });
+    const a = inc({ employment: 30000, employmentPeriod: "annual" });
+    const b = inc({ selfEmployed: 20000 });
+    expect(both.irs.finalIrs).toBeGreaterThan(a.irs.finalIrs + b.irs.finalIrs);
+  });
+  it("deductions from tax lower the IRS", () => {
+    const a = inc({ employment: 30000, employmentPeriod: "annual" });
+    const b = inc({ employment: 30000, employmentPeriod: "annual", taxDeductions: 800 });
+    expect(b.irs.finalIrs).toBeCloseTo(a.irs.finalIrs - 800, 2);
+  });
+  it("withholding balance: positive is due, negative is refund", () => {
+    const r = inc({ employment: 30000, employmentPeriod: "annual", withholding: 10000 });
+    expect(r.withholdingBalance).toBeCloseTo(r.irs.finalIrs - 10000, 2);
+    expect(r.withholdingBalance).toBeLessThan(0);
+  });
+  it("bracket, specific deduction and solidarity overrides", () => {
+    const r = inc({ employment: 100000, employmentPeriod: "annual", employeeSsRate: 0, specificDeduction: 0, brackets: [{ upTo: null, rate: 0.5 }], solidarity: false });
+    expect(r.irs.finalIrs).toBe(50000);
+    expect(r.irs.solidaritySurcharge).toBe(0);
+  });
+  it("non-ascending edited brackets do not produce negative slices", () => {
+    expect(progressiveTax(10000, { ...PT_2026, brackets: [{ upTo: 5000, rate: 0.1 }, { upTo: 1000, rate: 0.2 }, { upTo: null, rate: 0.3 }] }).tax.toNumber()).toBe(2000);
+  });
+});
+
+describe("tax years", () => {
+  it("loads rules by year and rejects unknown ones", () => {
+    expect(getTaxRules(2026).taxYear).toBe(2026);
+    expect(() => getTaxRules(1999)).toThrow(UnsupportedTaxYearError);
+  });
+  it("different year rules change the result", () => {
+    const alt: TaxYearRules = { ...PT_2026, taxYear: 2099, specificDeductionCatA: 0, brackets: [{ upTo: null, rate: 0.5 }] };
+    const reg = { ...taxRules, "2099": alt };
+    const r = calculateIncome({ ...DEFAULT_INPUT, taxYear: 2099, employment: 30000, employmentPeriod: "annual", employeeSsRate: 0 }, getTaxRules(2099, reg));
+    expect(r.irs.finalIrs).toBe(15000);
+  });
+});

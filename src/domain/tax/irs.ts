@@ -14,6 +14,8 @@ export interface IrsInput {
   categoryB?: { gross: number; taxable: number };
   disabilityPct: number;
   socialSecurityContributions: number;
+  /** Deductions from tax (deduções à coleta): dependents, general expenses, health, education, housing... */
+  otherTaxDeductions?: number;
 }
 
 export interface IrsBreakdown {
@@ -31,6 +33,8 @@ export interface IrsBreakdown {
   bracketTax: number;
   /** art. 87 credit actually used. */
   disabilityCredit: number;
+  /** Other deductions from tax actually used (capped at the remaining tax). */
+  otherDeductions: number;
   solidaritySurcharge: number;
   finalIrs: number;
   marginalRate: number;
@@ -48,11 +52,12 @@ export function progressiveTax(taxable: Decimal.Value, rules: TaxYearRules): { t
   for (const b of rules.brackets) {
     if (remaining.lte(0)) break;
     const upper = b.upTo === null ? null : D(b.upTo);
-    const width = upper === null ? remaining : min(remaining, upper.minus(lower));
+    // Guard against user-edited limits that are not ascending.
+    const width = upper === null ? remaining : max(min(remaining, upper.minus(lower)), 0);
     tax = tax.plus(width.mul(b.rate));
     marginal = b.rate;
     remaining = remaining.minus(width);
-    if (upper !== null) lower = upper;
+    if (upper !== null) lower = max(lower, upper);
   }
   return { tax, marginal };
 }
@@ -67,9 +72,9 @@ export function solidaritySurcharge(taxable: Decimal.Value, rules: TaxYearRules)
 }
 
 /**
- * Estimated FINAL annual IRS (liquidation) for a single taxpayer with Category A income.
- * Not modelled: dependents/general-expense/health deductions, mínimo de existência (art. 70),
- * joint taxation (quociente conjugal), other categories, autonomous rates, withholding.
+ * Estimated FINAL annual IRS (liquidation) for a single taxpayer with Category A and B income.
+ * Deductions from tax are taken as one total. Not modelled: mínimo de existência (art. 70),
+ * art. 78 caps on deductions, joint taxation (quociente conjugal), other categories, autonomous rates.
  */
 export function calculateIrs(input: IrsInput, rules: TaxYearRules): IrsBreakdown {
   const gross = D(Math.max(0, input.grossCategoryA));
@@ -97,9 +102,11 @@ export function calculateIrs(input: IrsInput, rules: TaxYearRules): IrsBreakdown
   const bracketTax = cents(tax);
 
   // art. 87: one credit per taxpayer (not per category), cannot make tax negative.
-  const credit = disabled ? min(bracketTax, D(rules.ias).mul(d.taxpayerCreditIasMultiple)) : ZERO;
+  const credit = cents(disabled ? min(bracketTax, D(rules.ias).mul(d.taxpayerCreditIasMultiple)) : ZERO);
+  // Other deductions from tax also cannot make it negative (art. 78 caps for high incomes not modelled).
+  const other = cents(min(max(D(input.otherTaxDeductions ?? 0), 0), bracketTax.minus(credit)));
   const solidarity = cents(solidaritySurcharge(taxable, rules));
-  const final = bracketTax.minus(cents(credit)).plus(solidarity);
+  const final = bracketTax.minus(credit).minus(other).plus(solidarity);
 
   return {
     grossCategoryA: num(gross),
@@ -112,6 +119,7 @@ export function calculateIrs(input: IrsInput, rules: TaxYearRules): IrsBreakdown
     taxableIncome: num(taxable),
     bracketTax: num(bracketTax),
     disabilityCredit: num(credit),
+    otherDeductions: num(other),
     solidaritySurcharge: num(solidarity),
     finalIrs: num(max(final, 0)),
     marginalRate: taxable.isZero() ? rules.brackets[0].rate : marginal,
