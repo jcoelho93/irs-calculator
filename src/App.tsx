@@ -1,5 +1,5 @@
-import SimpleCalculator from "./components/SimpleCalculator";
+import IncomeCalculator from "./components/IncomeCalculator";
 
 export default function App() {
-  return <SimpleCalculator />;
+  return <IncomeCalculator />;
 }

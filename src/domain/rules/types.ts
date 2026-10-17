@@ -1,5 +1,3 @@
-import type { Confidence } from "../parcels/types";
-
 /** A cited legal/administrative source. Lives in the registry, never in React components. */
 export interface RuleSource {
   id: string;
@@ -45,11 +43,15 @@ export interface TaxYearRules {
     taxpayerCreditIasMultiple: number;
   };
   solidarity: { from: number; to: number | null; rate: number }[];
-  terminationIndemnity: {
-    /** Share of the excess over the threshold that is taxed (1 = 100%). */
-    excessInclusionRate: number;
+  socialSecurity: {
+    /** Employee contribution rate on Category A gross pay (0.11 = 11%). */
+    employeeRate: number;
+    /** Self-employed contribution rate (applied to the relevant income). */
+    selfEmployedRate: number;
+    /** Share of Category B gross that is "relevant income" for contributions (services). */
+    selfEmployedBase: number;
   };
+  /** Simplified-regime coefficients for Category B (art. 31 CIRS), share of gross that is taxable. */
+  categoryBCoefficients: { id: string; label: string; coefficient: number }[];
   sourceIds: string[];
 }
-
-export type { Confidence };

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 export const Disclaimer = () => (
   <p className="text-xs leading-relaxed text-stone-500">
-    Esta calculadora fornece estimativas para análise de cenários e não constitui aconselhamento fiscal, jurídico ou financeiro. O tratamento fiscal em Portugal depende dos factos, da redação do acordo e da legislação aplicável. Confirme as conclusões relevantes com um profissional de fiscalidade ou um advogado em Portugal.
+    Esta calculadora fornece estimativas para análise de cenários e não constitui aconselhamento fiscal, jurídico ou financeiro. O imposto real depende da sua situação concreta e da legislação aplicável. Confirme as conclusões relevantes com um contabilista certificado ou um profissional de fiscalidade.
   </p>
 );
 
@@ -21,7 +21,9 @@ export function Card({ title, children, className = "" }: { title?: ReactNode; c
   );
 }
 
-const inputCls = "w-full rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-sm shadow-sm focus:border-blue-600";
+const fieldCls = "rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-sm shadow-sm focus:border-blue-600";
+const inputCls = `w-full ${fieldCls}`;
+const selectCls = `max-w-full ${fieldCls}`;
 
 export function Field({ label, hint, children }: { label: string; hint?: string; children: (id: string, describedBy?: string) => ReactNode }) {
   const id = useId();
@@ -40,7 +42,7 @@ export function TextInput({ id, describedBy, value, onChange, type = "text" }: {
 }
 
 /** Numeric input that keeps its own text while typing and commits parsed numbers. */
-export function NumberInput({ id, describedBy, value, onChange, step = 1, suffix, min }: { id?: string; describedBy?: string; value: number; onChange: (v: number) => void; step?: number; suffix?: string; min?: number }) {
+export function NumberInput({ id, describedBy, ariaLabel, value, onChange, step = 1, suffix, min }: { id?: string; describedBy?: string; ariaLabel?: string; value: number; onChange: (v: number) => void; step?: number; suffix?: string; min?: number }) {
   const [text, setText] = useState(value === 0 ? "" : String(value));
   useEffect(() => {
     setText((t) => (Number(t) === value ? t : value === 0 ? "" : String(value)));
@@ -50,6 +52,7 @@ export function NumberInput({ id, describedBy, value, onChange, step = 1, suffix
       <input
         id={id}
         aria-describedby={describedBy}
+        aria-label={ariaLabel}
         className={`${inputCls} num text-right ${suffix ? "pr-7" : ""}`}
         type="number"
         inputMode="decimal"
@@ -65,6 +68,14 @@ export function NumberInput({ id, describedBy, value, onChange, step = 1, suffix
       />
       {suffix && <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-xs text-stone-500">{suffix}</span>}
     </div>
+  );
+}
+
+export function Select({ id, ariaLabel, value, onChange, options }: { id?: string; ariaLabel?: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+  return (
+    <select id={id} aria-label={ariaLabel} className={selectCls} value={value} onChange={(e) => onChange(e.target.value)}>
+      {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
   );
 }
 
