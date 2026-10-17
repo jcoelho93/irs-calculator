@@ -20,6 +20,10 @@ export interface IncomeInput {
   employmentPeriod: PayPeriod;
   /** Category B (self-employed) gross income for the year. */
   selfEmployed: number;
+  /** Other taxable income for the year with no social security (e.g. the taxable part of a one-off payment); taxed with Category A. */
+  otherTaxable: number;
+  /** Income for the year that is not taxed at all (e.g. the tax-free part of a one-off payment). */
+  otherExempt: number;
   /** Deductions from tax (deduções à coleta), e.g. copied from last year's assessment. */
   taxDeductions: number;
 
@@ -46,6 +50,8 @@ export const DEFAULT_INPUT: IncomeInput = {
   employment: 0,
   employmentPeriod: "monthly14",
   selfEmployed: 0,
+  otherTaxable: 0,
+  otherExempt: 0,
   taxDeductions: 0,
   irsJovemYear: 0,
   municipalBenefit: 0,
@@ -64,6 +70,8 @@ export interface IncomeResult {
   rules: TaxYearRules;
   grossEmployment: number;
   grossSelfEmployed: number;
+  grossOtherTaxable: number;
+  grossOtherExempt: number;
   grossTotal: number;
   selfEmployedCoefficient: number;
   ssEmployment: number;
@@ -71,10 +79,15 @@ export interface IncomeResult {
   socialSecurity: number;
   irs: IrsBreakdown;
   netAnnual: number;
-  /** Net per payment, using the employment period (12 if the amount was entered annually). */
+  /** Net per payment from employment and self-employment only, using the employment period (12 if entered annually). */
   netPerMonth: number;
+  /** What the other income adds to the net: its gross less the extra IRS it causes. */
+  otherNet: number;
   monthsPerYear: number;
+  /** IRS over gross income (everything entered). */
   effectiveIrsRate: number;
+  /** IRS over taxable income plus IRS Jovem exempt income: the "taxa efetiva de tributação" on the nota de liquidação. */
+  assessmentRate: number;
   effectiveTotalRate: number;
   /** Positive = to pay with the annual return, negative = refund. */
   withholdingBalance: number;
@@ -95,6 +108,8 @@ export function calculateIncome(i: IncomeInput, base?: TaxYearRules): IncomeResu
   const months = PERIOD_MONTHS[i.employmentPeriod];
   const grossA = D(Math.max(0, i.employment)).mul(months);
   const grossB = D(Math.max(0, i.selfEmployed));
+  const otherTaxable = D(Math.max(0, i.otherTaxable));
+  const otherExempt = D(Math.max(0, i.otherExempt));
   const coefficient = i.selfEmployedCoefficient ?? rules.categoryBCoefficients[0].coefficient;
 
   const ss = rules.socialSecurity;
@@ -103,7 +118,8 @@ export function calculateIncome(i: IncomeInput, base?: TaxYearRules): IncomeResu
 
   const irs = calculateIrs(
     {
-      grossCategoryA: num(grossA),
+      // Other taxable income is added to Category A (it has no contributions of its own).
+      grossCategoryA: num(grossA.plus(otherTaxable)),
       categoryB: { gross: num(grossB), taxable: num(grossB.mul(coefficient)) },
       disabilityPct: i.disabilityPct,
       // Only mandatory Category A contributions count towards the art. 25 deduction.
@@ -115,15 +131,20 @@ export function calculateIncome(i: IncomeInput, base?: TaxYearRules): IncomeResu
     rules,
   );
 
-  const gross = grossA.plus(grossB);
+  const gross = grossA.plus(grossB).plus(otherTaxable).plus(otherExempt);
   const social = D(num(ssA)).plus(num(ssB));
   const net = max(gross.minus(social).minus(irs.finalIrs), ZERO);
   const perMonth = i.employmentPeriod === "annual" ? 12 : months;
+  // The monthly figure covers regular income only, so a one-off payment doesn't inflate it.
+  const hasOther = otherTaxable.gt(0) || otherExempt.gt(0);
+  const regularNet = hasOther ? D(calculateIncome({ ...i, otherTaxable: 0, otherExempt: 0 }, base).netAnnual) : net;
 
   return {
     rules,
     grossEmployment: num(grossA),
     grossSelfEmployed: num(grossB),
+    grossOtherTaxable: num(otherTaxable),
+    grossOtherExempt: num(otherExempt),
     grossTotal: num(gross),
     selfEmployedCoefficient: coefficient,
     ssEmployment: num(ssA),
@@ -131,9 +152,11 @@ export function calculateIncome(i: IncomeInput, base?: TaxYearRules): IncomeResu
     socialSecurity: num(social),
     irs,
     netAnnual: num(net),
-    netPerMonth: num(net.div(perMonth)),
+    netPerMonth: num(regularNet.div(perMonth)),
+    otherNet: num(net.minus(regularNet)),
     monthsPerYear: perMonth,
     effectiveIrsRate: ratio(irs.finalIrs, gross),
+    assessmentRate: ratio(irs.finalIrs, D(irs.taxableIncome).plus(irs.irsJovemExempt)),
     effectiveTotalRate: ratio(gross.minus(net), gross),
     withholdingBalance: num(D(irs.finalIrs).minus(Math.max(0, i.withholding))),
   };
