@@ -190,13 +190,15 @@ describe("other income", () => {
     expect(r.grossTotal).toBe(35000);
     expect(r.otherNet).toBe(5000);
   });
-  it("the monthly net leaves other income out", () => {
-    expect(inc({ ...base, otherTaxable: 10000, otherExempt: 5000 }).netPerMonth).toBe(inc(base).netPerMonth);
+  it("the monthly net follows the annual net; the regular figure leaves other income out", () => {
+    const r = inc({ ...base, otherTaxable: 10000, otherExempt: 5000 });
+    expect(r.netPerMonth).toBeCloseTo(r.netAnnual / 12, 1);
+    expect(r.regularNetPerMonth).toBe(inc(base).netPerMonth);
   });
   it("works with other income alone", () => {
     const r = inc({ otherTaxable: 20000 });
     expect(r.irs.specificDeduction).toBe(4587.09);
-    expect(r.netPerMonth).toBe(0);
+    expect(r.regularNetPerMonth).toBe(0);
   });
 });
 

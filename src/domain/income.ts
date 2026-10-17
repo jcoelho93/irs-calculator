@@ -79,8 +79,10 @@ export interface IncomeResult {
   socialSecurity: number;
   irs: IrsBreakdown;
   netAnnual: number;
-  /** Net per payment from employment and self-employment only, using the employment period (12 if entered annually). */
+  /** Annual net per payment, using the employment period (12 if entered annually). */
   netPerMonth: number;
+  /** The same, from employment and self-employment only (without the other income). */
+  regularNetPerMonth: number;
   /** What the other income adds to the net: its gross less the extra IRS it causes. */
   otherNet: number;
   monthsPerYear: number;
@@ -135,7 +137,7 @@ export function calculateIncome(i: IncomeInput, base?: TaxYearRules): IncomeResu
   const social = D(num(ssA)).plus(num(ssB));
   const net = max(gross.minus(social).minus(irs.finalIrs), ZERO);
   const perMonth = i.employmentPeriod === "annual" ? 12 : months;
-  // The monthly figure covers regular income only, so a one-off payment doesn't inflate it.
+  // Also the net without other income, so a one-off payment can be told apart from regular pay.
   const hasOther = otherTaxable.gt(0) || otherExempt.gt(0);
   const regularNet = hasOther ? D(calculateIncome({ ...i, otherTaxable: 0, otherExempt: 0 }, base).netAnnual) : net;
 
@@ -152,7 +154,8 @@ export function calculateIncome(i: IncomeInput, base?: TaxYearRules): IncomeResu
     socialSecurity: num(social),
     irs,
     netAnnual: num(net),
-    netPerMonth: num(regularNet.div(perMonth)),
+    netPerMonth: num(net.div(perMonth)),
+    regularNetPerMonth: num(regularNet.div(perMonth)),
     otherNet: num(net.minus(regularNet)),
     monthsPerYear: perMonth,
     effectiveIrsRate: ratio(irs.finalIrs, gross),

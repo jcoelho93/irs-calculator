@@ -276,7 +276,7 @@ export default function IncomeCalculator() {
               <>
                 <div className="mb-3 grid grid-cols-2 gap-3">
                   <Stat label="Líquido por ano" value={fmtEur(r.netAnnual)} />
-                  <Stat label={`Líquido por mês (× ${r.monthsPerYear})${hasOther ? ", sem outros rendimentos" : ""}`} value={fmtEur(r.netPerMonth)} />
+                  <Stat label={`Líquido por mês (× ${r.monthsPerYear})`} value={fmtEur(r.netPerMonth)} note={hasOther ? `${fmtEur(r.regularNetPerMonth)} sem outros rendimentos` : undefined} />
                 </div>
                 <dl aria-label="Estimativa anual" className="num text-sm">
                   {r.grossEmployment > 0 && <Line label="Bruto, categoria A" value={fmtEur(r.grossEmployment)} />}
@@ -399,11 +399,12 @@ function BracketsEditor({ value, onChange }: { value: Bracket[]; onChange: (b: B
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
     <div className="rounded-md bg-stone-50 px-3 py-2">
       <div className="text-xs text-stone-500">{label}</div>
       <div className="num text-xl font-semibold">{value}</div>
+      {note && <div className="num text-xs text-stone-500">{note}</div>}
     </div>
   );
 }
