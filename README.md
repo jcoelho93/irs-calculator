@@ -18,8 +18,9 @@ npm run build
   art. 56-A/87 disability, solidarity, deductions from tax), `income.ts` (`calculateIncome(input) => IncomeResult`,
   applies the user's overrides on top of the year's rules).
 - `src/components/` is UI only. Inputs are kept in localStorage in the browser and never sent anywhere.
-  "Exportar" downloads them as a JSON file and "Importar" loads one back (`domain/file.ts` validates it).
-  "Importar" also accepts last year's PDFs from Portal das Finanças: `lib/pdfText.ts` extracts their text
+  "Exportar" downloads a simulation as a JSON file and "Importar" loads one back (`domain/file.ts` validates it).
+  A separate "Documentos oficiais" form (`OfficialDocumentsForm.tsx`) takes last year's PDFs from Portal das
+  Finanças, one input per document and a single button: `lib/pdfText.ts` extracts their text
   with pdf.js (legacy build, loaded on demand). `domain/modelo3.ts` reads Category A and B income from the
   Modelo 3 comprovativo; `domain/liquidacao.ts` reads deductions from tax, disability, benefício municipal
   and the IRS Jovem year from the "Demonstração de Liquidação de IRS".
@@ -35,8 +36,11 @@ withholding balance, other taxable income (taxed with Category A, no social secu
 Not modelled (shown as such in the app): IRS Jovem eligibility checks, mínimo de existência, art. 78 caps on deductions,
 joint taxation, organised accounting, other income categories, autonomous regions.
 
-## Must be verified against official text before relying on the numbers
-Figures came from secondary sources (see the sources section in the app): 2026 bracket limits and rates;
-IAS €537.13; specific deduction €4,587.09; art. 56-A / art. 87 disability amounts; social security rates;
-IRS Jovem shares and cap, and that the Category B exemption applies to gross income before the coefficient
-(inferred from a real assessment).
+## Verification status
+Read against the official text on 2026-10-25: 2026 bracket limits and rates (art. 68), solidarity surcharge
+(art. 68-A), specific deduction and IAS €537.13 (art. 25, Portaria 480-A/2025/1), art. 87 credit, Category B
+coefficients (art. 31).
+
+Still from secondary sources or inferred: art. 56-A amounts and the order of its calculation; social security
+rates (employee 11%, self-employed 21.4% on 70%); IRS Jovem shares and cap (art. 12-B) and that the Category B
+exemption applies to gross income before the coefficient (inferred from a real assessment).
